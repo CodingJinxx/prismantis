@@ -152,10 +152,16 @@ const boxFinding = (grid: readonly (readonly string[])[], top: number, left: num
   const box = `box from line ${top + 1}`
   if (bottom === grid.length) return { line: bottom, message: `${box} does not close on its left side` }
   const end = grid[bottom]?.[left]
-  if (end === undefined || !FRAME_GLYPH.test(end) || INTO_EDGE.includes(end)) return undefined
-  if (!BOTTOM_LEFT.includes(end)) return { line: bottom + 1, message: `${box} does not close on its left side` }
   const slipped = grid.slice(top + 1, bottom).findIndex(row => !isSide(row[right]) && !ARROW_SIDE.includes(row[right] ?? ' '))
-  if (slipped >= 0) return { line: top + 2 + slipped, message: `right side of the ${box} slips out of column ${right + 1}` }
+  const slippedRight = slipped >= 0 ? { line: top + 2 + slipped, message: `right side of the ${box} slips out of column ${right + 1}` } : undefined
+  if (end !== undefined && INTO_EDGE.includes(end)) return undefined
+  if (end === undefined || !FRAME_GLYPH.test(end)) {
+    const corner = grid.slice(bottom + 1).map(row => row[left] ?? ' ').find(cell => TOP_LEFT.includes(cell) || BOTTOM_LEFT.includes(cell))
+    if (corner === undefined || !BOTTOM_LEFT.includes(corner)) return undefined
+    return slippedRight ?? { line: bottom + 1, message: `left side of the ${box} slips out of column ${left + 1}` }
+  }
+  if (!BOTTOM_LEFT.includes(end)) return { line: bottom + 1, message: `${box} does not close on its left side` }
+  if (slippedRight) return slippedRight
   const edge = grid[bottom] ?? []
   let stop = left + 1
   while (BOTTOM_RUN.includes(edge[stop] ?? '')) stop++

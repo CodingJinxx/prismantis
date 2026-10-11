@@ -125,6 +125,31 @@ test('a bottom edge that ends short of the top corner is found', () => {
   expect(checkFigure(lines('┌────────┐\n│ v1.4.2 │\n└───────┘'))).toEqual([{ line: 3, message: 'bottom of the box from line 1 does not end under its top right corner' }])
 })
 
+test('a box whose left side slips out before its bottom corner is found', () => {
+  expect(checkFigure(lines('┌──────┐\n│ ab   │\n │ cd  │\n└──────┘'))).toEqual([{ line: 3, message: 'left side of the box from line 1 slips out of column 1' }])
+})
+
+test('a box whose left side slips out is still checked on its right side', () => {
+  expect(checkFigure(lines('┌──────┐\n│ ab   │\n│ abcd  │\nx │ cd │\n└──────┘'))).toEqual([{ line: 3, message: 'right side of the box from line 1 slips out of column 8' }])
+})
+
+test('a fork without a bottom above a box of its own in the same column is no finding', () => {
+  expect(checkFigure(lines('  ┌──┴──┐\n  │     │\n  a     b\n  ┌─────┐\n  │ c   │\n  └─────┘'))).toEqual([])
+})
+
+test('a label next to a box pushing its side over is found, as in a plan of three boxes', () => {
+  const plan = lines([
+    'Step 1             Probe',
+    '┌──────────────┐   ┌──────────────┐',
+    '│ write tests  │──►│ count misses │',
+    '│ ship         │   │ > 1 of 3:    │',
+    '└──────────────┘   │ add a gate    │',
+    '   model: small  │ before it    │',
+    '                   └──────────────┘',
+  ].join('\n'))
+  expect(checkFigure(plan).map(finding => finding.line)).toEqual([5])
+})
+
 test('glyphs that may draw as emoji are found once per line', () => {
   expect(checkFigure(['⚠ check ✔ done ⚠'])).toEqual([{ line: 1, message: '"⚠", "✔" may draw as an emoji, use a text glyph' }])
   expect(checkFigure(['Deploy 🚀 ok'])).toEqual([{ line: 1, message: '"🚀" may draw as an emoji, use a text glyph' }])
