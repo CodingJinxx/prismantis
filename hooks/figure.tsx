@@ -241,9 +241,23 @@ const INK: readonly (keyof Theme)[] = ['accent', 'heading', 'tableHeader', 'emph
 
 const HEX = /^#(?:[0-9a-f]{3}){1,2}$/i
 
-const hueOf = (hex: string): { hue: number; saturation: number } => {
-  const full = hex.length === 4 ? [...hex.slice(1)].map(digit => digit + digit).join('') : hex.slice(1)
-  const [r = 0, g = 0, b = 0] = [0, 2, 4].map(at => parseInt(full.slice(at, at + 2), 16) / 255)
+const RGB = /^rgb\(\s*(\d{1,3})\s*,\s*(\d{1,3})\s*,\s*(\d{1,3})\s*\)$/i
+
+const channelsOf = (color: string): readonly [number, number, number] | undefined => {
+  const value = color.trim()
+  if (HEX.test(value)) {
+    const full = value.length === 4 ? [...value.slice(1)].map(digit => digit + digit).join('') : value.slice(1)
+    const [r = 0, g = 0, b = 0] = [0, 2, 4].map(at => parseInt(full.slice(at, at + 2), 16))
+    return [r, g, b]
+  }
+  const rgb = RGB.exec(value)
+  return rgb ? [Number(rgb[1]), Number(rgb[2]), Number(rgb[3])] : undefined
+}
+
+const colorKey = (channels: readonly [number, number, number]): string => channels.join(',')
+
+const hueOf = (channels: readonly [number, number, number]): { hue: number; saturation: number } => {
+  const [r, g, b] = channels.map(channel => Math.min(channel, 255) / 255) as [number, number, number]
   const max = Math.max(r, g, b)
   const spread = max - Math.min(r, g, b)
   const lightness = (max + max - spread) / 2
@@ -259,16 +273,20 @@ const pickedRoles = new WeakMap<Theme, Partial<Record<HuedRole, string>>>()
 export const figureRoleColors = (theme: Theme): Partial<Record<HuedRole, string>> => {
   const known = pickedRoles.get(theme)
   if (known) return known
-  const inks = [...new Set(INK.map(token => theme[token]).filter((color): color is string => color !== undefined && HEX.test(color)))]
-    .map(color => ({ color, ...hueOf(color) }))
+  const inks = [...new Set(INK.map(token => theme[token]).filter((color): color is string => color !== undefined))]
+    .flatMap(color => {
+      const channels = channelsOf(color)
+      return channels ? [{ color, key: colorKey(channels), ...hueOf(channels) }] : []
+    })
     .filter(ink => ink.saturation > 0.15)
-  const taken = new Set([theme.diagram])
+  const frame = theme.diagram === undefined ? undefined : channelsOf(theme.diagram)
+  const taken = new Set(frame ? [colorKey(frame)] : [])
   const picked: Partial<Record<HuedRole, string>> = {}
   for (const role of Object.keys(ROLE_HUES) as HuedRole[]) {
-    const [best] = inks.filter(ink => !taken.has(ink.color)).sort((a, b) => hueDistance(a.hue, ROLE_HUES[role]) - hueDistance(b.hue, ROLE_HUES[role]))
+    const [best] = inks.filter(ink => !taken.has(ink.key)).sort((a, b) => hueDistance(a.hue, ROLE_HUES[role]) - hueDistance(b.hue, ROLE_HUES[role]))
     if (!best) continue
     picked[role] = best.color
-    taken.add(best.color)
+    taken.add(best.key)
   }
   pickedRoles.set(theme, picked)
   return picked
@@ -278,7 +296,9 @@ const isHued = (role: FigureRole): role is HuedRole => role in ROLE_HUES
 
 const runColor = (style: Style, role: FigureRole | undefined): string | undefined => {
   if (!role) return style.theme.diagramText
-  return (isHued(role) ? figureRoleColors(style.theme)[role] : undefined) ?? style.theme[ROLE_TOKENS[role]]
+  const own = style.theme[ROLE_TOKENS[role]]
+  if (!isHued(role) || (own !== undefined && !channelsOf(own))) return own
+  return figureRoleColors(style.theme)[role] ?? own
 }
 
 const isBold = (style: Style, role: FigureRole | undefined): boolean => role === 'strong' || (role === 'warn' && !runColor(style, 'warn'))

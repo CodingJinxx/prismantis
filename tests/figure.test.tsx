@@ -278,6 +278,24 @@ test('no role takes the diagram color, even when it is the reddest in the theme'
   expect(figureRoleColors(theme)).toEqual({ warn: '#d19a66', ok: '#98c379', note: '#e5c07b' })
 })
 
+test('a role whose own color you set by name keeps that color', { options: { codeFlagColor: 'red' } }, async ($, on) => {
+  engine(on)
+  for (const surface of ['terminal', 'desktop'] as const) {
+    const ui = await $.ui.mount(reply(ROLES, surface))
+    expect((await ui.find({ type: 'Text', text: /^break$/ }))?.props.color).toBe('red')
+    await ui.unmount()
+  }
+})
+
+test('an rgb diagram color still keeps the roles off the frame color', () => {
+  const theme = { diagram: 'rgb(243,139,168)', codeFlag: '#f38ba8', emphasis: '#eb6f92', codeString: '#a6e3a1', heading: '#f9e2af' }
+  expect(figureRoleColors(theme).warn).not.toBe('#f38ba8')
+})
+
+test('rgb colors take part in the pick', () => {
+  expect(figureRoleColors({ diagram: '#89b4fa', codeFlag: 'rgb(220, 30, 40)', codeString: '#a6e3a1', heading: '#f9e2af' }).warn).toBe('rgb(220, 30, 40)')
+})
+
 test('a theme without hex colors keeps the role tokens it had', () => {
   expect(figureRoleColors({ codeFlag: 'red', codeString: 'green', heading: 'yellow', diagram: 'blue' })).toEqual({})
 })
