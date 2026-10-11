@@ -436,6 +436,19 @@ test('your prompts carry the render hint as model-only context', async ($, on) =
   expect(seen[0]).toContain(FIGURE_HINT)
 })
 
+test('prompts another plugin sends carry the render hint, notifications do not', async ($, on) => {
+  const seen: (readonly string[] | undefined)[] = []
+  mock.env(on, {})
+  on('prompt.submit', (_, e) => {
+    seen.push(e.context)
+    return { text: e.text, context: e.context }
+  })
+  await $.prompt.submit({ text: 'next step', wait: false, origin: { kind: 'plugin', name: 'some-plugin' } })
+  await $.prompt.submit({ text: 'task done', wait: false, origin: { kind: 'task-notification' } })
+  expect(seen[0]).toContain(FIGURE_HINT)
+  expect(seen[1] ?? []).not.toContain(FIGURE_HINT)
+})
+
 test('no render hint when diagramHints is off', { options: { diagramHints: false } }, async ($, on) => {
   const seen: (readonly string[] | undefined)[] = []
   mock.env(on, {})

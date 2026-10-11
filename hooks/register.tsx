@@ -395,7 +395,7 @@ export const register: Register = (on, options) => {
 
   on('prompt.submit', async ($, e, next) => {
     terminal = await probe($, style, probes)
-    if (!style.diagramHints || (e.origin.kind !== 'composer' && e.origin.kind !== 'bridge')) return next(e)
+    if (!style.diagramHints || !['composer', 'bridge', 'plugin'].includes(e.origin.kind)) return next(e)
     void latexEngine($, latex)
     const hints = [HINT, FIGURE_HINT, ...((await figureCheck($, figureTool)) ? [FIGURE_CHECK_HINT] : []), ...(latex.ready && !latex.stopped ? [LATEX_HINT] : [])]
     return next({ ...e, context: [...(e.context ?? []), ...hints] })

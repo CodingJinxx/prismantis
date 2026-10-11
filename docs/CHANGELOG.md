@@ -13,6 +13,7 @@ All notable changes to this project are documented here. The format follows [Kee
 ### Changed
 
 - With `diagramHints` on (the default), the model-only note grows from about 270 to about 870 tokens per typed prompt, and besides saying what renders it now asks Claude to lead a reply that explains, compares or plans something with a figure and to keep the prose to what the figure does not show. Turn `diagramHints` off to drop the whole note.
+- The `diagramHints` note also goes with prompts another plugin sends on your behalf, so replies in a session a plugin drives get the same tables, diagrams and figures as typed prompts. Notifications, scheduled tasks and headless runs still get none.
 
 ## [0.15.0] - 2026-10-10
 
