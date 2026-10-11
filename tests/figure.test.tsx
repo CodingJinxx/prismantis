@@ -133,6 +133,16 @@ test('a box whose left side slips out is still checked on its right side', () =>
   expect(checkFigure(lines('┌──────┐\n│ ab   │\n│ abcd  │\nx │ cd │\n└──────┘'))).toEqual([{ line: 3, message: 'right side of the box from line 1 slips out of column 8' }])
 })
 
+test('a fork that joins again below is no finding, with arrows or labels before the join', () => {
+  expect(checkFigure(lines('  ┌──┴──┐\n  │     │\n  ▼     ▼\n  a     b\n  │     │\n  └──┬──┘'))).toEqual([])
+  expect(checkFigure(lines('  ┌──┴──┐\n  │     │\n  a     b\n  └──┬──┘'))).toEqual([])
+})
+
+test('a fork whose leg goes on into a tree, and a cycle with an arrow on its left side, are no finding', () => {
+  expect(checkFigure(lines('  ┌──┴──┐\n  │     │\n api   web\n  │\n  └─ routes'))).toEqual([])
+  expect(checkFigure(lines('┌─◄ fetch ◄─┐\n│           │\n▼           │\n│           │\n└─► store ─►┘'))).toEqual([])
+})
+
 test('a fork without a bottom above a box of its own in the same column is no finding', () => {
   expect(checkFigure(lines('  ┌──┴──┐\n  │     │\n  a     b\n  ┌─────┐\n  │ c   │\n  └─────┘'))).toEqual([])
 })

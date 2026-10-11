@@ -157,7 +157,8 @@ const boxFinding = (grid: readonly (readonly string[])[], top: number, left: num
   if (end !== undefined && INTO_EDGE.includes(end)) return undefined
   if (end === undefined || !FRAME_GLYPH.test(end)) {
     const corner = grid.slice(bottom + 1).map(row => row[left] ?? ' ').find(cell => TOP_LEFT.includes(cell) || BOTTOM_LEFT.includes(cell))
-    if (corner === undefined || !BOTTOM_LEFT.includes(corner)) return undefined
+    const movedSide = [left - 2, left - 1, left + 1, left + 2].some(column => isSide(grid[bottom]?.[column]))
+    if (!movedSide || corner === undefined || !BOTTOM_LEFT.includes(corner)) return undefined
     return slippedRight ?? { line: bottom + 1, message: `left side of the ${box} slips out of column ${left + 1}` }
   }
   if (!BOTTOM_LEFT.includes(end)) return { line: bottom + 1, message: `${box} does not close on its left side` }
