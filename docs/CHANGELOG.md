@@ -2,6 +2,18 @@
 
 All notable changes to this project are documented here. The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and the project uses [Semantic Versioning](https://semver.org/).
 
+## [Unreleased]
+
+### Added
+
+- Figures: code blocks tagged `figure` draw line by line as written, colored by role markup such as `{warn:timeout}`, for what reads better as a picture than as a diagram (a timeout racing a retry, a screen layout, before and after). Roles take existing theme colors, so themes and color overrides apply: `accent` the diagram color, `dim` the comment color, `strong` the strong color, and `warn`, `ok` and `note` the theme's reddest, greenest and most amber accent color, each a different one, so their meaning holds in every preset; `warn` draws bold in a theme without colors (`mono`). A figure stays a code block while it streams, when it has more than 80 lines, when a line is wider than the window or than 100 columns, or when a glyph may draw as an emoji or takes two columns, a control character, direction mark or other character that draws no column is in it, or role markup is wrong; a closed figure that stays code says why in one dim line above it, as diagrams do. Frames are not checked: a box that does not close or a side, corner or divider out of its column draws as written. Figures draw with `mermaid` off too, with `⧉ source` still copying the block as written.
+- The model-only note behind `diagramHints` gains a short part on figures: when position carries meaning (durations racing on a time axis, a screen layout, phases, before and after) prefer a figure over mermaid, and the prose does not retell it; when you ask to explain, compare or plan something and pictures would make it easier to grasp, build the reply around them, with the core on the first screen as a picture or a sentence; then the role markup, at most 74 columns, one-column glyphs, and edge ticks `▏` for time axes so `█` bars line up. The main part now also skips a diagram that repeats what a figure shows, and skips diagrams and pictures in short or simple answers.
+
+### Changed
+
+- With `diagramHints` on (the default), the model-only note is now about 630 tokens per prompt you type or another plugin sends: about 275 for the main part and about 360 for the new figure part, plus about 80 for the LaTeX part while it runs. All three are counted with Claude's tokenizer; 0.16.0 documented 190 and 60 from a rougher count. Turn `diagramHints` off to drop the whole note.
+- The `diagramHints` note also goes with prompts another plugin sends (`$.prompt.submit`, framed or `asUser`), so replies in a session a plugin drives get the same tables, diagrams and figures as typed prompts. Notifications, scheduled tasks and the prompt a headless `claude -p` run starts with still get none; a plugin's prompt inside such a run gets it. A plugin whose prompts must not carry the note works with `diagramHints` off.
+
 ## [0.17.1] - 2026-10-12
 
 ### Security

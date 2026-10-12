@@ -1,5 +1,5 @@
 import { atom, read, update } from 'claude-code'
-import type { EngineInterface, Register, RenderElement, RenderSurface } from 'claude-code'
+import type { EngineInterface, PromptOrigin, Register, RenderElement, RenderSurface } from 'claude-code'
 
 import { clockText, endedAt, promptKey, sentAt, withRecord } from './clock'
 import type { Formula } from './latex'
@@ -8,6 +8,7 @@ import type { Block } from './markdown'
 import { parse, texText } from './markdown'
 import type { ClipboardBackend } from './clipboard'
 import { clipboardCommand } from './clipboard'
+import { FIGURE_HINT, drawFigure, isFigureLang } from './figure'
 import { boxArt, inlineMarks, mermaidText, shortenEdgeLabels, unsupportedKind } from './mermaid'
 import type { Drawn, Fold } from './render'
 import { isReadOnlyCall, remember, rememberCall, renderBlocks, renderDiffCard, renderExpandedShell, renderFailure, renderShellResult, renderToolGroup, renderToolRow, renderTurnDuration, renderUserPrompt, width } from './render'
@@ -22,10 +23,14 @@ const HINT = [
   'Replies in this session are drawn by the prismantis mod, which runs inside Claude Code and is not a command or tool to call: when the user asks to show something with prismantis, write it as markdown in the reply.',
   'Markdown tables, GitHub alerts (> [!WARNING], > [!NOTE]), fenced code with a language tag, and ```mermaid blocks render as colored terminal graphics:',
   'flowcharts, sequence diagrams and xychart-beta bar or line charts.',
-  'When a reply carries a numeric series or a flow that is easier to see than read, add one small diagram or chart with short labels.',
-  'Skip diagrams for simple answers.',
+  'When a reply carries a numeric series or a flow that is easier to see than read, add a small diagram or chart with short labels, not a second picture of what a figure already shows.',
+  'Skip diagrams and pictures for short or simple answers.',
   'Put any command or snippet the user may run or copy in a fenced block with a language tag, never inline code: fenced blocks get a copy button, inline code does not.',
 ].join(' ')
+
+const HINTED_ORIGINS = ['composer', 'bridge', 'plugin'] as const satisfies readonly PromptOrigin['kind'][]
+
+const takesHint = (origin: PromptOrigin): boolean => HINTED_ORIGINS.some(kind => kind === origin.kind)
 
 const LATEX_HINT = 'This terminal typesets LaTeX math: a formula in $$…$$ on lines of its own, or in a ```math block, renders as an image (KaTeX syntax). Inline $…$ does not render, so write inline math as plain text or Unicode.'
 
@@ -263,6 +268,11 @@ const drawMarkdown = ($: EngineInterface, el: ReturnType<EngineInterface['ui']['
       }
     }
   }
+  for (const [i, block] of blocks.entries()) {
+    if (block.kind !== 'code' || !isFigureLang(block.lang)) continue
+    const figure = drawFigure(el, style, block, columns, `b${i}`)
+    if (figure) drawn.set(i, figure)
+  }
   const Image = 'Image' in el ? el.Image : null
   if (Image) {
     for (const [i, formula] of math) {
@@ -389,9 +399,9 @@ export const register: Register = (on, options) => {
       await update($, sent, list => withRecord(list, { text: promptKey(e.text), at }))
     }
     terminal = await probe($, style, probes)
-    if (!style.diagramHints || (e.origin.kind !== 'composer' && e.origin.kind !== 'bridge')) return next(e)
+    if (!style.diagramHints || !takesHint(e.origin)) return next(e)
     void latexEngine($, latex)
-    const hints = latex.ready && !latex.stopped ? [HINT, LATEX_HINT] : [HINT]
+    const hints = [HINT, FIGURE_HINT, ...(latex.ready && !latex.stopped ? [LATEX_HINT] : [])]
     return next({ ...e, context: [...(e.context ?? []), ...hints] })
   })
 
