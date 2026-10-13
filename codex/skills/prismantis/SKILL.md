@@ -1,11 +1,12 @@
 ---
-description: Show what prismantis does in Codex
+name: prismantis
+description: Show what prismantis does in Codex. Use when the user runs $prismantis or asks what prismantis is or does.
 ---
 
 Reply with exactly the markdown between the START and END lines, nothing before or after it.
 
 START
-## prismantis for Codex
+**prismantis for Codex**
 
 Replies here come back as tables, copyable commands and text pictures, which Codex draws on its own.
 

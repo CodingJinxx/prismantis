@@ -3,5 +3,5 @@
   "version": "0.18.1",
   "description": "Nudges Codex to answer with tables, fenced commands and plain-text pictures, which Codex draws on its own.",
   "hooks": "./codex/hooks.json",
-  "commands": "./codex/commands"
+  "skills": "./codex/skills"
 }

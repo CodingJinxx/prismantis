@@ -6,7 +6,7 @@ All notable changes to this project are documented here. The format follows [Kee
 
 ### Added
 
-- Codex: installing prismantis in Codex adds a session-start note that asks for markdown tables, fenced commands and plain-text pictures, and no mermaid, because Codex draws tables and links itself but not diagrams. Nothing is redrawn: themes, mermaid art, color markup and copy buttons stay Claude Code only. Codex asks you to trust the hook once in `/hooks`.
+- Codex: installing prismantis in Codex adds a session-start note that asks for markdown tables, fenced commands and plain-text pictures, and no mermaid, because Codex draws tables and links itself but not diagrams. Nothing is redrawn: themes, mermaid art, color markup and copy buttons stay Claude Code only. `$prismantis` shows a one-screen intro. Codex asks you to trust the hook once in `/hooks`.
 
 ## [0.18.1] - 2026-10-13
 

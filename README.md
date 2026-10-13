@@ -58,7 +58,7 @@ For LaTeX math, install RaTeX's renderer and set `latex` to `true`; see [LaTeX m
 
 ### Codex
 
-Codex has no way for a plugin to redraw replies, so prismantis there is only a note at session start: tables, fenced commands and plain-text pictures, which Codex draws on its own. Install it, then trust its hook once in `/hooks`:
+Codex has no way for a plugin to redraw replies, so prismantis there is a note at session start: tables, fenced commands and plain-text pictures, which Codex draws on its own. `$prismantis` shows what it does. Install it, then trust its hook once in `/hooks`:
 
 ```bash
 codex plugin marketplace add NahumLitvin/prismantis && codex plugin add prismantis@prismantis
