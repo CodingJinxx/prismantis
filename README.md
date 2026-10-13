@@ -62,7 +62,9 @@ Codex has no way for a plugin to redraw replies, so prismantis there gives Codex
 
 | Codex alone | With prismantis |
 |---|---|
-| ![Codex prints the mermaid source](docs/compare/codex-before.png) | ![Codex draws the diagram](docs/compare/codex-after.png) | Install it, then trust its hook once in `/hooks`:
+| ![Codex in its default colors](docs/compare/codex-before.png) | ![Codex in prismantis-dracula](docs/compare/codex-after.png) |
+
+Install it, then trust its hook once in `/hooks`:
 
 ```bash
 codex plugin marketplace add NahumLitvin/prismantis && codex plugin add prismantis@prismantis
