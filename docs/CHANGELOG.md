@@ -2,6 +2,12 @@
 
 All notable changes to this project are documented here. The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and the project uses [Semantic Versioning](https://semver.org/).
 
+## [Unreleased]
+
+### Added
+
+- Codex: installing prismantis in Codex adds a session-start note that asks for markdown tables, fenced commands and plain-text pictures, and no mermaid, because Codex draws tables and links itself but not diagrams. Nothing is redrawn: themes, mermaid art, color markup and copy buttons stay Claude Code only. Codex asks you to trust the hook once in `/hooks`.
+
 ## [0.18.1] - 2026-10-13
 
 ### Security

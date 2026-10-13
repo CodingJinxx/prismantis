@@ -124,9 +124,10 @@ jobs:
         run: |
           v=$(jq -r .version .claude-plugin/plugin.json)
           m=$(jq -r '.plugins[0].version' .claude-plugin/marketplace.json)
+          x=$(jq -r .version .codex-plugin/plugin.json)
           c=$(grep -m1 -oE '^## \[[0-9]+\.[0-9]+\.[0-9]+\]' docs/CHANGELOG.md | tr -d '#[] ')
-          echo "plugin=$v marketplace=$m changelog=$c"
-          test "$v" = "$m" && test "$v" = "$c"
+          echo "plugin=$v marketplace=$m codex=$x changelog=$c"
+          test "$v" = "$m" && test "$v" = "$x" && test "$v" = "$c"
       - name: Lockfile pins no registry
         run: "! grep -q '\"resolved\"' scripts/package-lock.json"
       - name: No code comments

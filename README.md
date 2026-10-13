@@ -56,6 +56,14 @@ claude plugin uninstall prismantis@prismantis
 
 For LaTeX math, install RaTeX's renderer and set `latex` to `true`; see [LaTeX math](#latex-math). Until then formulas draw as text.
 
+### Codex
+
+Codex has no way for a plugin to redraw replies, so prismantis there is only a note at session start: tables, fenced commands and plain-text pictures, which Codex draws on its own. Install it, then trust its hook once in `/hooks`:
+
+```bash
+codex plugin marketplace add NahumLitvin/prismantis && codex plugin add prismantis@prismantis
+```
+
 ## Features
 
 | Feature | What you get |
