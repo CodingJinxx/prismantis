@@ -58,7 +58,11 @@ For LaTeX math, install RaTeX's renderer and set `latex` to `true`; see [LaTeX m
 
 ### Codex
 
-Codex has no way for a plugin to redraw replies, so prismantis there is a note at session start: tables, fenced commands and plain-text pictures, which Codex draws on its own. `$prismantis` shows what it does. Install it, then trust its hook once in `/hooks`:
+Codex has no way for a plugin to redraw replies, so prismantis there is a note at session start: tables, fenced commands, mermaid sized to fit Codex's own renderer, and plain-text pictures for timelines and charts. `$prismantis` shows what it does.
+
+| Codex alone | With prismantis |
+|---|---|
+| ![Codex prints the mermaid source](docs/compare/codex-before.png) | ![Codex draws the diagram](docs/compare/codex-after.png) | Install it, then trust its hook once in `/hooks`:
 
 ```bash
 codex plugin marketplace add NahumLitvin/prismantis && codex plugin add prismantis@prismantis
