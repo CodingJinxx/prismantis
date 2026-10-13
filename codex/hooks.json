@@ -6,8 +6,7 @@
           {
             "type": "command",
             "command": "cat \"$PLUGIN_ROOT/codex/hint.md\"",
-            "commandWindows": "type \"%PLUGIN_ROOT%\\codex\\hint.md\"",
-            "timeout": 5
+            "commandWindows": "type \"%PLUGIN_ROOT%\\codex\\hint.md\""
           }
         ]
       }
