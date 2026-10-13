@@ -65,6 +65,18 @@ ${rules.join('\n')}
 const skill = (name, description, body) => `---\nname: ${name}\ndescription: ${description}\n---\n\n${body}`
 
 rmSync(out, { recursive: true, force: true })
+await build({
+  entryPoints: [join(root, 'scripts/codex-fence.mjs')],
+  outfile: join(out, 'fence.mjs'),
+  bundle: true,
+  format: 'esm',
+  platform: 'node',
+  jsx: 'transform',
+  jsxFactory: 'h',
+  jsxFragment: 'Fragment',
+  external: ['claude-code'],
+  logLevel: 'error',
+})
 const write = (path, text) => {
   mkdirSync(dirname(join(out, path)), { recursive: true })
   writeFileSync(join(out, path), text)
@@ -80,4 +92,4 @@ write('skills/prismantis-themes/SKILL.md', skill('prismantis-themes', 'Install t
 
 const manifest = JSON.parse(readFileSync(join(root, '.claude-plugin/plugin.json'), 'utf8'))
 mkdirSync(join(root, '.codex-plugin'), { recursive: true })
-writeFileSync(join(root, '.codex-plugin/plugin.json'), `${JSON.stringify({ name: manifest.name, version: manifest.version, description: manifest.description, hooks: './codex/hooks.json', skills: './codex/skills' }, null, 2)}\n`)
+writeFileSync(join(root, '.codex-plugin/plugin.json'), `${JSON.stringify({ name: manifest.name, version: manifest.version, description: manifest.description, hooks: './codex/hooks.json', skills: './codex/skills', fenceRenderers: Object.fromEntries(['mermaid', 'figure'].map(lang => [lang, { command: `node "$PLUGIN_ROOT/codex/fence.mjs" ${lang}` }])) }, null, 2)}\n`)
