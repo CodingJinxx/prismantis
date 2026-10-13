@@ -56,6 +56,14 @@ claude plugin uninstall prismantis@prismantis
 
 For LaTeX math, install RaTeX's renderer and set `latex` to `true`; see [LaTeX math](#latex-math). Until then formulas draw as text.
 
+### Gemini CLI
+
+prismantis installs as a Gemini CLI extension: the same model note, 15 themes that color prose, tables, links and code, and `/prismantis` for the demo. Pick a theme with `/theme`. Gemini CLI draws no mermaid, so diagrams come back as text figures.
+
+```bash
+gemini extensions install https://github.com/NahumLitvin/prismantis
+```
+
 ### Codex
 
 Codex has no way for a plugin to redraw replies, so prismantis there gives Codex the same model note as Claude Code and ships the 16 themes as Codex syntax themes: code, inline code, table headers and mermaid boxes take the theme colors, prose stays Codex's own. `$prismantis` shows the demo, `$prismantis-themes` installs the themes and `/theme` picks one.

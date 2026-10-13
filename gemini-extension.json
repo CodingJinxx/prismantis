@@ -1,0 +1,428 @@
+{
+  "name": "prismantis",
+  "version": "0.18.1",
+  "description": "Colorful, themeable rendering for Claude Code replies: tables, headings, code, numbers, paths and links.",
+  "contextFileName": "gemini/GEMINI.md",
+  "themes": [
+    {
+      "name": "prismantis-catppuccin-mocha",
+      "type": "custom",
+      "text": {
+        "primary": "#cdd6f4",
+        "secondary": "#6c7086",
+        "link": "#89b4fa",
+        "accent": "#cba6f7"
+      },
+      "status": {
+        "success": "#a6e3a1",
+        "warning": "#f9e2af",
+        "error": "#f38ba8"
+      },
+      "border": {
+        "default": "#585b70",
+        "focused": "#cba6f7"
+      },
+      "ui": {
+        "comment": "#6c7086",
+        "symbol": "#89b4fa",
+        "gradient": [
+          "#cba6f7",
+          "#89b4fa",
+          "#89b4fa"
+        ]
+      }
+    },
+    {
+      "name": "prismantis-catppuccin-latte",
+      "type": "custom",
+      "text": {
+        "primary": "#4c4f69",
+        "secondary": "#9ca0b0",
+        "link": "#1e66f5",
+        "accent": "#8839ef"
+      },
+      "status": {
+        "success": "#40a02b",
+        "warning": "#df8e1d",
+        "error": "#d20f39"
+      },
+      "border": {
+        "default": "#acb0be",
+        "focused": "#8839ef"
+      },
+      "ui": {
+        "comment": "#9ca0b0",
+        "symbol": "#1e66f5",
+        "gradient": [
+          "#8839ef",
+          "#1e66f5",
+          "#1e66f5"
+        ]
+      }
+    },
+    {
+      "name": "prismantis-dracula",
+      "type": "custom",
+      "text": {
+        "primary": "#f8f8f2",
+        "secondary": "#6272a4",
+        "link": "#8be9fd",
+        "accent": "#bd93f9"
+      },
+      "status": {
+        "success": "#f1fa8c",
+        "warning": "#bd93f9",
+        "error": "#ff79c6"
+      },
+      "border": {
+        "default": "#6272a4",
+        "focused": "#bd93f9"
+      },
+      "ui": {
+        "comment": "#6272a4",
+        "symbol": "#50fa7b",
+        "gradient": [
+          "#bd93f9",
+          "#bd93f9",
+          "#8be9fd"
+        ]
+      }
+    },
+    {
+      "name": "prismantis-nord",
+      "type": "custom",
+      "text": {
+        "primary": "#d8dee9",
+        "secondary": "#4c566a",
+        "link": "#88c0d0",
+        "accent": "#88c0d0"
+      },
+      "status": {
+        "success": "#a3be8c",
+        "warning": "#88c0d0",
+        "error": "#81a1c1"
+      },
+      "border": {
+        "default": "#4c566a",
+        "focused": "#88c0d0"
+      },
+      "ui": {
+        "comment": "#4c566a",
+        "symbol": "#88c0d0",
+        "gradient": [
+          "#88c0d0",
+          "#81a1c1",
+          "#88c0d0"
+        ]
+      }
+    },
+    {
+      "name": "prismantis-tokyo-night",
+      "type": "custom",
+      "text": {
+        "primary": "#a9b1d6",
+        "secondary": "#565f89",
+        "link": "#73daca",
+        "accent": "#bb9af7"
+      },
+      "status": {
+        "success": "#9ece6a",
+        "warning": "#7dcfff",
+        "error": "#bb9af7"
+      },
+      "border": {
+        "default": "#565f89",
+        "focused": "#bb9af7"
+      },
+      "ui": {
+        "comment": "#565f89",
+        "symbol": "#7aa2f7",
+        "gradient": [
+          "#bb9af7",
+          "#7aa2f7",
+          "#73daca"
+        ]
+      }
+    },
+    {
+      "name": "prismantis-gruvbox-dark",
+      "type": "custom",
+      "text": {
+        "primary": "#ebdbb2",
+        "secondary": "#928374",
+        "link": "#83a598",
+        "accent": "#d3869b"
+      },
+      "status": {
+        "success": "#b8bb26",
+        "warning": "#fabd2f",
+        "error": "#fe8019"
+      },
+      "border": {
+        "default": "#504945",
+        "focused": "#d3869b"
+      },
+      "ui": {
+        "comment": "#928374",
+        "symbol": "#83a598",
+        "gradient": [
+          "#d3869b",
+          "#83a598",
+          "#83a598"
+        ]
+      }
+    },
+    {
+      "name": "prismantis-gruvbox-light",
+      "type": "custom",
+      "text": {
+        "primary": "#3c3836",
+        "secondary": "#928374",
+        "link": "#076678",
+        "accent": "#8f3f71"
+      },
+      "status": {
+        "success": "#79740e",
+        "warning": "#b57614",
+        "error": "#af3a03"
+      },
+      "border": {
+        "default": "#a89984",
+        "focused": "#8f3f71"
+      },
+      "ui": {
+        "comment": "#928374",
+        "symbol": "#076678",
+        "gradient": [
+          "#8f3f71",
+          "#076678",
+          "#076678"
+        ]
+      }
+    },
+    {
+      "name": "prismantis-rose-pine",
+      "type": "custom",
+      "text": {
+        "primary": "#e0def4",
+        "secondary": "#6e6a86",
+        "link": "#c4a7e7",
+        "accent": "#c4a7e7"
+      },
+      "status": {
+        "success": "#f6c177",
+        "warning": "#c4a7e7",
+        "error": "#eb6f92"
+      },
+      "border": {
+        "default": "#6e6a86",
+        "focused": "#c4a7e7"
+      },
+      "ui": {
+        "comment": "#6e6a86",
+        "symbol": "#9ccfd8",
+        "gradient": [
+          "#c4a7e7",
+          "#c4a7e7",
+          "#c4a7e7"
+        ]
+      }
+    },
+    {
+      "name": "prismantis-rose-pine-dawn",
+      "type": "custom",
+      "text": {
+        "primary": "#464261",
+        "secondary": "#9893a5",
+        "link": "#907aa9",
+        "accent": "#907aa9"
+      },
+      "status": {
+        "success": "#ea9d34",
+        "warning": "#907aa9",
+        "error": "#b4637a"
+      },
+      "border": {
+        "default": "#9893a5",
+        "focused": "#907aa9"
+      },
+      "ui": {
+        "comment": "#9893a5",
+        "symbol": "#56949f",
+        "gradient": [
+          "#907aa9",
+          "#907aa9",
+          "#907aa9"
+        ]
+      }
+    },
+    {
+      "name": "prismantis-everforest",
+      "type": "custom",
+      "text": {
+        "primary": "#d3c6aa",
+        "secondary": "#859289",
+        "link": "#7fbbb3",
+        "accent": "#a7c080"
+      },
+      "status": {
+        "success": "#a7c080",
+        "warning": "#e69875",
+        "error": "#e67e80"
+      },
+      "border": {
+        "default": "#7a8478",
+        "focused": "#a7c080"
+      },
+      "ui": {
+        "comment": "#859289",
+        "symbol": "#7fbbb3",
+        "gradient": [
+          "#a7c080",
+          "#7fbbb3",
+          "#7fbbb3"
+        ]
+      }
+    },
+    {
+      "name": "prismantis-github-dark",
+      "type": "custom",
+      "text": {
+        "primary": "#e6edf3",
+        "secondary": "#7d8590",
+        "link": "#58a6ff",
+        "accent": "#d2a8ff"
+      },
+      "status": {
+        "success": "#a5d6ff",
+        "warning": "#79c0ff",
+        "error": "#ff7b72"
+      },
+      "border": {
+        "default": "#8b949e",
+        "focused": "#d2a8ff"
+      },
+      "ui": {
+        "comment": "#7d8590",
+        "symbol": "#d2a8ff",
+        "gradient": [
+          "#d2a8ff",
+          "#58a6ff",
+          "#58a6ff"
+        ]
+      }
+    },
+    {
+      "name": "prismantis-github-light",
+      "type": "custom",
+      "text": {
+        "primary": "#1f2328",
+        "secondary": "#6e7781",
+        "link": "#0969da",
+        "accent": "#8250df"
+      },
+      "status": {
+        "success": "#0a3069",
+        "warning": "#0550ae",
+        "error": "#cf222e"
+      },
+      "border": {
+        "default": "#6e7781",
+        "focused": "#8250df"
+      },
+      "ui": {
+        "comment": "#6e7781",
+        "symbol": "#8250df",
+        "gradient": [
+          "#8250df",
+          "#0969da",
+          "#0969da"
+        ]
+      }
+    },
+    {
+      "name": "prismantis-one-dark",
+      "type": "custom",
+      "text": {
+        "primary": "#abb2bf",
+        "secondary": "#5c6370",
+        "link": "#61afef",
+        "accent": "#c678dd"
+      },
+      "status": {
+        "success": "#98c379",
+        "warning": "#e06c75",
+        "error": "#e06c75"
+      },
+      "border": {
+        "default": "#5c6370",
+        "focused": "#c678dd"
+      },
+      "ui": {
+        "comment": "#5c6370",
+        "symbol": "#61afef",
+        "gradient": [
+          "#c678dd",
+          "#61afef",
+          "#61afef"
+        ]
+      }
+    },
+    {
+      "name": "prismantis-solarized-dark",
+      "type": "custom",
+      "text": {
+        "primary": "#93a1a1",
+        "secondary": "#586e75",
+        "link": "#268bd2",
+        "accent": "#6c71c4"
+      },
+      "status": {
+        "success": "#859900",
+        "warning": "#b58900",
+        "error": "#cb4b16"
+      },
+      "border": {
+        "default": "#586e75",
+        "focused": "#6c71c4"
+      },
+      "ui": {
+        "comment": "#586e75",
+        "symbol": "#268bd2",
+        "gradient": [
+          "#6c71c4",
+          "#268bd2",
+          "#268bd2"
+        ]
+      }
+    },
+    {
+      "name": "prismantis-solarized-light",
+      "type": "custom",
+      "text": {
+        "primary": "#586e75",
+        "secondary": "#93a1a1",
+        "link": "#268bd2",
+        "accent": "#6c71c4"
+      },
+      "status": {
+        "success": "#859900",
+        "warning": "#b58900",
+        "error": "#cb4b16"
+      },
+      "border": {
+        "default": "#93a1a1",
+        "focused": "#6c71c4"
+      },
+      "ui": {
+        "comment": "#93a1a1",
+        "symbol": "#268bd2",
+        "gradient": [
+          "#6c71c4",
+          "#268bd2",
+          "#268bd2"
+        ]
+      }
+    }
+  ]
+}

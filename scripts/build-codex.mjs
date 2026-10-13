@@ -81,3 +81,32 @@ write('skills/prismantis-themes/SKILL.md', skill('prismantis-themes', 'Install t
 const manifest = JSON.parse(readFileSync(join(root, '.claude-plugin/plugin.json'), 'utf8'))
 mkdirSync(join(root, '.codex-plugin'), { recursive: true })
 writeFileSync(join(root, '.codex-plugin/plugin.json'), `${JSON.stringify({ name: manifest.name, version: manifest.version, description: manifest.description, hooks: './codex/hooks.json', skills: './codex/skills' }, null, 2)}\n`)
+
+const GEMINI = [
+  'This session runs in Gemini CLI, not Claude Code. The notes after this paragraph are what prismantis tells Claude in Claude Code; follow them with these Gemini CLI differences.',
+  'Gemini CLI draws markdown tables, headings, lists, links and fenced code itself, but not mermaid: a mermaid block prints as source, so draw flows, charts and timelines as a figure instead.',
+  'A figure block prints as written in a plain code block, so leave out the {role:text} color markup. There are no copy buttons and GitHub alerts draw as plain quotes.',
+].join(' ')
+
+const geminiTheme = (name, t) => ({
+  name: `prismantis-${name}`,
+  type: 'custom',
+  text: { primary: t.codeText, secondary: t.codeComment, link: t.link, accent: t.accent },
+  status: { success: t.codeString, warning: t.heading, error: t.codeFlag },
+  border: { default: t.tableRule, focused: t.accent },
+  ui: { comment: t.codeComment, symbol: t.codeCommand, gradient: [t.accent, t.diagram, t.link].filter(Boolean) },
+})
+
+const gemini = join(root, 'gemini')
+rmSync(gemini, { recursive: true, force: true })
+mkdirSync(gemini, { recursive: true })
+writeFileSync(join(gemini, 'GEMINI.md'), `${GEMINI}\n\n${cc.HINT}\n\n${cc.FIGURE_HINT}\n`)
+mkdirSync(join(root, 'commands'), { recursive: true })
+writeFileSync(join(root, 'commands/prismantis.toml'), `description = "Show the prismantis demo"\nprompt = '''\nReply with exactly the markdown between the START and END lines, nothing before or after it.\n\nSTART${cc.showcaseText(cc.PRESET_NAMES)}END\n'''\n`)
+writeFileSync(join(root, 'gemini-extension.json'), `${JSON.stringify({
+  name: manifest.name,
+  version: manifest.version,
+  description: manifest.description,
+  contextFileName: 'gemini/GEMINI.md',
+  themes: cc.PRESET_NAMES.filter(n => cc.PRESETS[n].codeText).map(n => geminiTheme(n, cc.PRESETS[n])),
+}, null, 2)}\n`)

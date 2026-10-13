@@ -7,6 +7,7 @@ All notable changes to this project are documented here. The format follows [Kee
 ### Added
 
 - Codex: installing prismantis in Codex gives it the same model note as Claude Code, plus what Codex's own renderer cannot draw, so replies come back with tables, fenced commands, mermaid sized for Codex and text figures. `$prismantis` shows the demo, and `$prismantis-themes` installs the 16 themes as Codex syntax themes, which color code, inline code, table headers and mermaid boxes; `/theme` picks one. Prose, headings and copy buttons stay Codex's own. Codex asks you to trust the hook once in `/hooks`. Everything in it is generated from the Claude Code side.
+- Gemini CLI: prismantis installs as a Gemini CLI extension. It gives Gemini the same model note through `GEMINI.md`, ships 15 themes that color prose, headings, tables, links and code, picked with `/theme`, and adds `/prismantis` for the demo. Gemini CLI draws no mermaid, so the note asks for text figures. Generated from the Claude Code side like the Codex plugin.
 
 ## [0.18.1] - 2026-10-13
 
