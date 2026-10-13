@@ -424,5 +424,13 @@
         ]
       }
     }
-  ]
+  ],
+  "fenceRenderers": {
+    "mermaid": {
+      "command": "node \"$EXTENSION_PATH/codex/fence.mjs\" mermaid"
+    },
+    "figure": {
+      "command": "node \"$EXTENSION_PATH/codex/fence.mjs\" figure"
+    }
+  }
 }
