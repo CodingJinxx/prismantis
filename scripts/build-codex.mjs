@@ -39,7 +39,7 @@ const TEXTMATE = {
   function: ['entity.name.function', 'support.function'], 'class-name': ['entity.name.type', 'entity.name.class', 'support.type', 'support.class'], builtin: ['support.function.builtin'], key: ['support.type.property-name'], selector: ['entity.name.selector'],
   property: ['variable.other.property'], tag: ['entity.name.tag'], 'attr-name': ['entity.other.attribute-name'], variable: ['variable'], regex: ['string.regexp'],
 }
-const EXTRA = { inlineCode: ['markup.inline.raw.string.markdown', 'markup.raw.inline.markdown'], heading: ['markup.heading'], strong: ['markup.bold'], emphasis: ['markup.italic'], quote: ['markup.quote'] }
+const EXTRA = { inlineCode: ['markup.inline.raw.string.markdown', 'markup.raw.inline.markdown'], heading: ['markup.heading'], strong: ['markup.bold'], emphasis: ['markup.italic'], quote: ['markup.quote'], bullet: ['markup.list'], link: ['markup.underline.link'] }
 
 const rule = (scopes, fg) => `\t\t<dict><key>scope</key><string>${scopes.join(', ')}</string><key>settings</key><dict><key>foreground</key><string>${fg}</string></dict></dict>`
 const tmTheme = (name, t) => {

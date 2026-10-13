@@ -40,6 +40,8 @@
 		<dict><key>scope</key><string>markup.bold</string><key>settings</key><dict><key>foreground</key><string>#282828</string></dict></dict>
 		<dict><key>scope</key><string>markup.italic</string><key>settings</key><dict><key>foreground</key><string>#8f3f71</string></dict></dict>
 		<dict><key>scope</key><string>markup.quote</string><key>settings</key><dict><key>foreground</key><string>#7c6f64</string></dict></dict>
+		<dict><key>scope</key><string>markup.list</string><key>settings</key><dict><key>foreground</key><string>#af3a03</string></dict></dict>
+		<dict><key>scope</key><string>markup.underline.link</string><key>settings</key><dict><key>foreground</key><string>#076678</string></dict></dict>
 	</array>
 </dict>
 </plist>
