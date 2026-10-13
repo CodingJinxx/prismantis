@@ -8,13 +8,14 @@ Reply with exactly the markdown between the START and END lines, nothing before 
 START
 **prismantis for Codex**
 
-Replies here come back as tables, copyable commands and text pictures, which Codex draws on its own.
+Replies here come back as tables, copyable commands, diagrams and text pictures, which Codex draws on its own.
 
 | You ask for | You get |
 |---|---|
 | A comparison | A table with short cells |
 | Something to run | A fenced block that copies cleanly |
-| A flow, timeline or layout | A text picture, no mermaid source |
+| A flow or call sequence | A mermaid diagram sized to fit |
+| A timeline or layout | A text picture |
 
 ```text
 ┌──────────┐     ┌──────────┐     ┌──────────┐
