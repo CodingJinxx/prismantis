@@ -427,10 +427,10 @@
   ],
   "fenceRenderers": {
     "mermaid": {
-      "command": "node \"$EXTENSION_PATH/codex/fence.mjs\" mermaid"
+      "command": "node \"${extensionPath}${/}codex${/}fence.mjs\" mermaid gemini"
     },
     "figure": {
-      "command": "node \"$EXTENSION_PATH/codex/fence.mjs\" figure"
+      "command": "node \"${extensionPath}${/}codex${/}fence.mjs\" figure gemini"
     }
   }
 }

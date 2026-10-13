@@ -55,7 +55,7 @@ const lines = node => {
 const lang = process.argv[2]
 const source = readFileSync(0, 'utf8').replace(/\n$/, '')
 const columns = Number(process.env.COLUMNS) || 100
-const style = resolveStyle({ theme: process.env.PRISMANTIS_THEME || (process.env.EXTENSION_PATH ? geminiTheme() : configTheme()) || 'catppuccin-mocha' })
+const style = resolveStyle({ theme: process.env.PRISMANTIS_THEME || (process.argv[3] === 'gemini' ? geminiTheme() : configTheme()) || 'catppuccin-mocha' })
 const art = lang === 'mermaid' ? mermaidText(source, false, columns) : null
 const drawn = lang === 'figure' ? drawFigure(el, style, { kind: 'code', lang, lines: source.split('\n') }, columns, 'f')?.element : art && boxArt(el, style, art, 'm')
 if (!drawn) process.exit(1)

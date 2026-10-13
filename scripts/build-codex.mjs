@@ -121,5 +121,5 @@ writeFileSync(join(root, 'gemini-extension.json'), `${JSON.stringify({
   description: manifest.description,
   contextFileName: 'gemini/GEMINI.md',
   themes: cc.PRESET_NAMES.filter(n => cc.PRESETS[n].codeText).map(n => geminiTheme(n, cc.PRESETS[n])),
-  fenceRenderers: Object.fromEntries(['mermaid', 'figure'].map(lang => [lang, { command: `node "$EXTENSION_PATH/codex/fence.mjs" ${lang}` }])),
+  fenceRenderers: Object.fromEntries(['mermaid', 'figure'].map(lang => [lang, { command: `node "\${extensionPath}\${/}codex\${/}fence.mjs" ${lang} gemini` }])),
 }, null, 2)}\n`)

@@ -3958,7 +3958,7 @@ var lines = (node) => {
 var lang = process.argv[2];
 var source = readFileSync(0, "utf8").replace(/\n$/, "");
 var columns = Number(process.env.COLUMNS) || 100;
-var style = resolveStyle({ theme: process.env.PRISMANTIS_THEME || (process.env.EXTENSION_PATH ? geminiTheme() : configTheme()) || "catppuccin-mocha" });
+var style = resolveStyle({ theme: process.env.PRISMANTIS_THEME || (process.argv[3] === "gemini" ? geminiTheme() : configTheme()) || "catppuccin-mocha" });
 var art = lang === "mermaid" ? mermaidText(source, false, columns) : null;
 var drawn = lang === "figure" ? drawFigure(el, style, { kind: "code", lang, lines: source.split("\n") }, columns, "f")?.element : art && boxArt(el, style, art, "m");
 if (!drawn) process.exit(1);
