@@ -6,7 +6,7 @@ All notable changes to this project are documented here. The format follows [Kee
 
 ### Added
 
-- Codex: installing prismantis in Codex adds a session-start note that asks for markdown tables, fenced commands, mermaid diagrams small enough for Codex's own renderer (flowchart, sequence, state, class, ER), and plain-text pictures for timelines and charts it cannot draw. Nothing is redrawn: themes, colors and copy buttons stay Claude Code only. `$prismantis` shows a one-screen intro. Codex asks you to trust the hook once in `/hooks`.
+- Codex: installing prismantis in Codex gives it the same model note as Claude Code, plus what Codex's own renderer cannot draw, so replies come back with tables, fenced commands, mermaid sized for Codex and text figures. `$prismantis` shows the demo, and `$prismantis-themes` installs the 16 themes as Codex syntax themes, which color code, inline code, table headers and mermaid boxes; `/theme` picks one. Prose, headings and copy buttons stay Codex's own. Codex asks you to trust the hook once in `/hooks`. Everything in it is generated from the Claude Code side.
 
 ## [0.18.1] - 2026-10-13
 

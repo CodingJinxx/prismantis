@@ -1,7 +1,7 @@
 {
   "name": "prismantis",
   "version": "0.18.1",
-  "description": "Nudges Codex to answer with tables, fenced commands and plain-text pictures, which Codex draws on its own.",
+  "description": "Colorful, themeable rendering for Claude Code replies: tables, headings, code, numbers, paths and links.",
   "hooks": "./codex/hooks.json",
   "skills": "./codex/skills"
 }

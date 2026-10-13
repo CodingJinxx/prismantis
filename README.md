@@ -58,7 +58,7 @@ For LaTeX math, install RaTeX's renderer and set `latex` to `true`; see [LaTeX m
 
 ### Codex
 
-Codex has no way for a plugin to redraw replies, so prismantis there is a note at session start: tables, fenced commands, mermaid sized to fit Codex's own renderer, and plain-text pictures for timelines and charts. `$prismantis` shows what it does.
+Codex has no way for a plugin to redraw replies, so prismantis there gives Codex the same model note as Claude Code and ships the 16 themes as Codex syntax themes: code, inline code, table headers and mermaid boxes take the theme colors, prose stays Codex's own. `$prismantis` shows the demo, `$prismantis-themes` installs the themes and `/theme` picks one.
 
 | Codex alone | With prismantis |
 |---|---|
