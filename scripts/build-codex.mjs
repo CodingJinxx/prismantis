@@ -39,9 +39,8 @@ const TEXTMATE = {
   function: ['entity.name.function', 'support.function'], 'class-name': ['entity.name.type', 'entity.name.class', 'support.type', 'support.class'], builtin: ['support.function.builtin'], key: ['support.type.property-name'], selector: ['entity.name.selector'],
   property: ['variable.other.property'], tag: ['entity.name.tag'], 'attr-name': ['entity.other.attribute-name'], variable: ['variable'], regex: ['string.regexp'],
 }
-const EXTRA = { inlineCode: ['markup.inline.raw.string.markdown', 'markup.raw.inline.markdown'], heading: ['markup.heading'], strong: ['markup.bold'], emphasis: ['markup.italic'], quote: ['markup.quote'], link: ['markup.underline.link'] }
+const EXTRA = { inlineCode: ['markup.inline.raw.string.markdown', 'markup.raw.inline.markdown'], heading: ['markup.heading'], strong: ['markup.bold'], emphasis: ['markup.italic'], quote: ['markup.quote'] }
 
-const esc = s => s.replace(/&/g, '&amp;').replace(/</g, '&lt;')
 const rule = (scopes, fg) => `\t\t<dict><key>scope</key><string>${scopes.join(', ')}</string><key>settings</key><dict><key>foreground</key><string>${fg}</string></dict></dict>`
 const tmTheme = (name, t) => {
   const rules = []
@@ -52,7 +51,7 @@ const tmTheme = (name, t) => {
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0">
 <dict>
-\t<key>name</key><string>${esc(name)}</string>
+\t<key>name</key><string>${name}</string>
 \t<key>settings</key>
 \t<array>
 \t\t<dict><key>settings</key><dict>${fg}</dict></dict>
