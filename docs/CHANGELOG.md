@@ -14,6 +14,7 @@ All notable changes to this project are documented here. The format follows [Kee
 - Bar charts with negative values. Every bar used to fill the `0` row, so `2` and `-2` drew to the same height, and an all-negative chart ran its bars up past the top of the chart. The `0` line is now drawn solid like the axis line, and bars grow up or down from its middle and stop exactly where their value is, to the half cell. An all-negative chart hangs its bars from a solid line at the top of the axis.
 - Bar values sit at the end of their bar. A value was centered on its tick column, which is right of the middle of an even-width bar, so `1200` hung off its bar's edge. A negative bar's value sat above `0` on the positive side, and the bar at the top of an untitled chart, or any bar in an all-negative chart, lost its value. Values are now centered on their bar, half a cell to the right when they cannot center exactly (`1200` covers a four-wide bar, `800` sits over its last three cells), a negative bar's value sits under it, and a bar that reaches the top of the axis keeps its value on a row above the chart.
 - A line over a bar chart passes behind the bars instead of overwriting their tips, so a bar under the line no longer looks shorter than its value.
+- Footnote marks in a table's header row draw in the footnote color, as they do in paragraphs and body cells. Before, they took the header color and looked like part of the column name.
 
 ## [0.18.4] - 2026-10-14
 

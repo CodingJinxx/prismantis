@@ -80,6 +80,13 @@ const sliceInline = (nodes: Inline[], from: number, to: number): Inline[] => {
 
 const hasLink = (nodes: Inline[]): boolean => nodes.some(n => n.kind === 'link' || ('children' in n && hasLink(n.children)))
 
+const headerRuns = (nodes: Inline[]): Inline[] =>
+  nodes.flatMap(n => (n.kind === 'footnote' ? [n] : 'children' in n ? headerRuns(n.children) : [{ kind: 'text' as const, text: n.text }]))
+    .reduce<Inline[]>((out, n) => {
+      const last = out[out.length - 1]
+      return n.kind === 'text' && last?.kind === 'text' ? [...out.slice(0, -1), { kind: 'text', text: last.text + n.text }] : [...out, n]
+    }, [])
+
 const HTTP_LINKS_FROM = [2, 1, 289]
 const EDITOR_LINKS_FROM = [2, 1, 294]
 
@@ -402,10 +409,11 @@ const renderTable = (el: ElementTable, style: Style, block: Extract<Block, { kin
         const cell = flowOf(style, cells[c] ?? [], Infinity)
         const content = cell ? cell.lines[0]! : (cells[c] ?? [])
         const side = cell?.base === 'R' && block.align[c] !== 'center' ? 'flex-end' : justify(c)
+        const runs = isHeader ? headerRuns(content) : content
         const cellBox = (
           <Box key={`${k}.${c}`} width={w} flexShrink={0} justifyContent={side}>
             {isHeader
-              ? <Text bold color={t.tableHeader}>{inlineText(content)}</Text>
+              ? <Text bold color={t.tableHeader}>{runs.some(n => n.kind === 'footnote') ? renderInline(el, style, runs, `${k}.${c}`) : inlineText(runs)}</Text>
               : <Text>{renderInline(el, style, content, `${k}.${c}`)}</Text>}
           </Box>
         )
@@ -420,7 +428,7 @@ const renderTable = (el: ElementTable, style: Style, block: Extract<Block, { kin
     const wrapped = widths.map((w, c) => {
       const content = cells[c] ?? []
       if (natural[c]! <= w) return [content]
-      return wrapInline(isHeader ? [{ kind: 'text', text: inlineText(content) }] : content, w)
+      return wrapInline(isHeader ? headerRuns(content) : content, w)
     })
     return Array.from({ length: Math.max(...wrapped.map(l => l.length)) }, (_, i) =>
       row(wrapped.map(l => l[i] ?? []), `${k}.${i}`, isHeader))
