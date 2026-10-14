@@ -24,6 +24,7 @@ export type Style = {
   toolStyle: 'chat' | 'tree-dim' | 'tree-bold' | 'classic'
   toolOutput: 'full' | 'quiet'
   narration?: boolean
+  diffStyle: 'card' | 'full' | 'marks' | 'bar'
   highlightNumbers: boolean
   highlightPaths: boolean
   mermaid: boolean
@@ -73,6 +74,7 @@ export const resolveStyle = (options: PluginOptions): Style => {
     clock: pick(options.clock, ['off', '24h', '12h'] as const, 'off'),
     toolStyle: pick(options.toolStyle, ['chat', 'tree-dim', 'tree-bold', 'classic'] as const, 'chat'),
     toolOutput: pick(options.toolOutput, ['full', 'quiet'] as const, 'full'),
+    diffStyle: pick(options.diffStyle, ['card', 'full', 'marks', 'bar'] as const, 'card'),
     highlightNumbers: options.highlightNumbers !== false,
     highlightPaths: options.highlightPaths !== false,
     mermaid: options.mermaid !== false,

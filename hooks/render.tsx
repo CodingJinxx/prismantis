@@ -813,10 +813,33 @@ type DiffLine = { mark: '+' | '-' | ' '; num: number; text: string }
 
 const HEX = /^#[0-9a-f]{6}$/i
 
-export const tint = (base: string | undefined, color: string | undefined): string | undefined => {
+const channels = (hex: string): number[] => [1, 3, 5].map(i => parseInt(hex.slice(i, i + 2), 16))
+
+export const tint = (base: string | undefined, color: string | undefined, share: number): string | undefined => {
   if (!base || !color || !HEX.test(base) || !HEX.test(color)) return undefined
-  const channel = (hex: string, i: number) => parseInt(hex.slice(i, i + 2), 16)
-  return `#${[1, 3, 5].map(i => Math.round(channel(base, i) * 0.8 + channel(color, i) * 0.2).toString(16).padStart(2, '0')).join('')}`
+  const [b, c] = [channels(base), channels(color)]
+  return `#${b.map((v, i) => Math.round(v * (1 - share) + c[i]! * share).toString(16).padStart(2, '0')).join('')}`
+}
+
+const luminance = (hex: string): number => {
+  const [r, g, b] = channels(hex).map(v => (v / 255 <= 0.03928 ? v / 255 / 12.92 : ((v / 255 + 0.055) / 1.055) ** 2.4))
+  return 0.2126 * r! + 0.7152 * g! + 0.0722 * b!
+}
+
+export const contrast = (a: string, b: string): number => {
+  const [hi, lo] = [luminance(a), luminance(b)].sort((x, y) => y - x)
+  return (hi! + 0.05) / (lo! + 0.05)
+}
+
+const TEXT_CONTRAST = 4.5
+
+export const diffTint = (text: string | undefined, color: string | undefined): string | undefined => {
+  if (!text || !color || !HEX.test(text) || !HEX.test(color)) return undefined
+  const dark = contrast(text, '#000000') >= contrast(text, '#ffffff')
+  const base = dark ? '#000000' : '#ffffff'
+  let share = dark ? 0.3 : 0.2
+  while (share > 0.05 && contrast(text, tint(base, color, share)!) < TEXT_CONTRAST) share -= 0.01
+  return tint(base, color, share)
 }
 
 export const diffLines = (output: unknown): DiffLine[] | undefined => {
@@ -843,43 +866,122 @@ export const diffLines = (output: unknown): DiffLine[] | undefined => {
   return rows
 }
 
-export const renderDiffCard = (el: ElementTable, style: Style, output: unknown, fold: Fold, id: string): RenderElement | undefined => {
-  const rows = diffLines(output)
-  if (rows === undefined) return undefined
+const diffBox = (el: ElementTable, style: Style, rows: DiffLine[], fold: Fold, id: string, key: string, title?: string): RenderElement => {
   const { Box, Text } = el
   const t = style.theme
   const added = rows.filter(r => r.mark === '+').length
   const removed = rows.filter(r => r.mark === '-').length
-  const toggle = rows.length > DIFF_LINES ? fold?.(id, rows.length - DIFF_LINES, 'fold') : null
+  const toggle = rows.length > DIFF_LINES ? fold?.(id, rows.length - DIFF_LINES, `fold${key}`) : null
   const shown = rows.slice(0, toggle?.folded === false ? DIFF_MAX : DIFF_LINES)
   const gutter = String(Math.max(0, ...shown.map(r => r.num))).length
   const color = (mark: DiffLine['mark']) => (mark === '+' ? t.number : mark === '-' ? t.codeFlag : undefined)
-  const tints = { '+': tint(t.rule, t.number), '-': tint(t.rule, t.codeFlag), ' ': undefined }
+  const look = style.diffStyle
+  const tinted = look === 'card' || look === 'full'
+  const tints = { '+': tinted ? diffTint(t.codeText, t.number) : undefined, '-': tinted ? diffTint(t.codeText, t.codeFlag) : undefined, ' ': undefined }
+  const frame = look === 'card' ? { borderStyle: 'round', borderColor: t.rule, paddingX: 1 } : {}
   return (
-    <Box flexDirection="row">
-      <Text dimColor>{'  ⎿  '}</Text>
-      <Box flexDirection="column" borderStyle="round" borderColor={t.rule} paddingX={1} flexShrink={1}>
-        <Text>
-          <Text color={t.number} dimColor={added === 0}>{`+${added}`}</Text>
-          <Text> </Text>
-          <Text color={t.codeFlag} dimColor={removed === 0}>{`−${removed}`}</Text>
-        </Text>
-        {shown.map((r, i) => {
-          const bg = tints[r.mark]
-          return (
-            <Box key={`d${i}`} flexDirection="row" {...(bg ? { backgroundColor: bg } : {})}>
-              <Text dimColor>{`${String(r.num).padStart(gutter)} `}</Text>
-              <Text color={color(r.mark)} dimColor={r.mark === ' '}>{`${r.mark} `}</Text>
-              <Text color={bg ? t.codeText : color(r.mark)} dimColor={r.mark === ' '}>{r.text === '' ? ' ' : r.text}</Text>
-            </Box>
-          )
-        })}
-        {rows.length > shown.length && toggle?.folded !== true ? <Text dimColor>{`… +${rows.length - shown.length} lines`}</Text> : null}
-        {toggle?.element ?? null}
-      </Box>
+    <Box key={`card${key}`} flexDirection="column" flexShrink={1} {...frame}>
+      <Text>
+        {title === undefined ? null : <Text color={t.path}>{`${title} `}</Text>}
+        <Text color={t.number} dimColor={added === 0}>{`+${added}`}</Text>
+        <Text> </Text>
+        <Text color={t.codeFlag} dimColor={removed === 0}>{`−${removed}`}</Text>
+      </Text>
+      {shown.map((r, i) => {
+        const bg = tints[r.mark]
+        return (
+          <Box key={`d${i}`} flexDirection="row" {...(bg ? { backgroundColor: bg } : {})}>
+            {look === 'bar' ? <Text color={color(r.mark)}>{r.mark === ' ' ? '  ' : '▌ '}</Text> : null}
+            <Text dimColor>{`${String(r.num).padStart(gutter)} `}</Text>
+            <Text color={color(r.mark)} dimColor={r.mark === ' '}>{`${r.mark} `}</Text>
+            <Text color={bg || look === 'bar' ? t.codeText : color(r.mark)} dimColor={r.mark === ' '}>{r.text === '' ? ' ' : r.text}</Text>
+          </Box>
+        )
+      })}
+      {rows.length > shown.length && toggle?.folded !== true ? <Text dimColor>{`… +${rows.length - shown.length} lines`}</Text> : null}
+      {toggle?.element ?? null}
     </Box>
   )
 }
+
+const diffRow = (el: ElementTable, style: Style, cards: RenderElement[], below: boolean): RenderElement => (
+  <el.Box flexDirection="row">
+    <el.Text dimColor>{below ? '     ' : '  ⎿  '}</el.Text>
+    <el.Box flexDirection="column" flexShrink={1} {...(style.diffStyle === 'full' ? { flexGrow: 1 } : { alignItems: 'flex-start' as const })}>{cards}</el.Box>
+  </el.Box>
+)
+
+export const renderDiffCard = (el: ElementTable, style: Style, output: unknown, fold: Fold, id: string): RenderElement | undefined => {
+  const rows = diffLines(output)
+  return rows === undefined ? undefined : diffRow(el, style, [diffBox(el, style, rows, fold, id, '')], false)
+}
+
+type EditedFile = { path: string; rows: DiffLine[] }
+
+export type BashEdits = { files: EditedFile[]; more: number; shared: boolean }
+
+export const EDIT_NOTES = {
+  first: 'every file that changed while this ran, by this command or anything else: a view of the changes, not an audit of the command',
+  shared: 'another command ran in this repository at the same time, so changes by either may show under either one',
+  tree: 'a git step in this command can move the working tree, so these may be its changes rather than edits',
+} as const
+
+export const bashEdits = (output: unknown): BashEdits | undefined => {
+  if (output === null || typeof output !== 'object') return undefined
+  const diff = (output as { bashEditDiff?: unknown }).bashEditDiff
+  if (diff === null || typeof diff !== 'object') return undefined
+  const { files, moreFiles, shared } = diff as { files?: unknown; moreFiles?: unknown; shared?: unknown }
+  if (!Array.isArray(files) || files.length === 0) return undefined
+  const edited: EditedFile[] = []
+  for (const file of files as ({ filePath?: unknown; hunks?: unknown } | null)[]) {
+    const rows = diffLines({ structuredPatch: file?.hunks })
+    if (typeof file?.filePath !== 'string' || rows === undefined) return undefined
+    edited.push({ path: file.filePath, rows })
+  }
+  return { files: edited, more: typeof moreFiles === 'number' && moreFiles > 0 ? moreFiles : 0, shared: shared === true }
+}
+
+export const withoutBashEdits = (output: unknown): unknown => {
+  if (output === null || typeof output !== 'object') return output
+  const { bashEditDiff: _, ...rest } = output as Record<string, unknown>
+  return rest
+}
+
+export const hasShellOutput = (output: unknown): boolean => {
+  const out = output !== null && typeof output === 'object' ? (output as Record<string, unknown>) : {}
+  return lines(out.stdout).length + lines(out.stderr).length > 0
+}
+
+export const renderBashEdits = (el: ElementTable, style: Style, edits: BashEdits, fold: Fold, id: string, below = false, notes: readonly string[] = []): RenderElement => {
+  const cards = edits.files.map((file, i) => diffBox(el, style, file.rows, fold, `${id}:${i}`, String(i), shortPath(style, file.path)))
+  const more = edits.more ? [<el.Text key="more" dimColor>{`… +${edits.more} more ${edits.more === 1 ? 'file' : 'files'}`}</el.Text>] : []
+  const said = notes.map((note, i) => <el.Text key={`note${i}`} dimColor>{`(${note})`}</el.Text>)
+  return diffRow(el, style, [...cards, ...more, ...said], below)
+}
+
+const TREE_MOVERS = new Set(['checkout', 'switch', 'stash', 'pull', 'merge', 'rebase', 'reset', 'restore', 'clean', 'cherry-pick', 'revert'])
+
+const gitSubcommand = (args: string[]): string | undefined => {
+  for (let i = 0; i < args.length; i++) {
+    const arg = args[i]!
+    if (!arg.startsWith('-')) return arg
+    if (arg === '-C' || arg === '-c') i++
+  }
+  return undefined
+}
+
+export const editNotes = (edits: BashEdits, first: boolean, command?: string): string[] => [
+  ...(first ? [EDIT_NOTES.first] : []),
+  ...(edits.shared ? [EDIT_NOTES.shared] : []),
+  ...(command !== undefined && movesTree(command) ? [EDIT_NOTES.tree] : []),
+]
+
+export const movesTree = (command: string): boolean =>
+  parseShell(command).segments.some(({ words }) => {
+    const argv = commandWords(words)
+    const [name, ...rest] = argv[0] === 'sudo' ? argv.slice(1) : argv
+    return name?.split('/').pop() === 'git' && TREE_MOVERS.has(gitSubcommand(rest) ?? '')
+  })
 
 const NOISE_LINES = /^((Error:\s*)?Exit code \d+|at\s+(\S+\s+\()?\S+:\d+(:\d+)?\)?|Node\.js v\d.*|exit status \d+|\.\.\. \d+ more)$/i
 

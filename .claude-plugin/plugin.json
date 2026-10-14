@@ -265,7 +265,7 @@
     "ruleColor": {
       "type": "string",
       "title": "Rules",
-      "description": "Color for horizontal rules and heading banners. Hex, rgb(), ansi256() or a name. Empty uses the theme.",
+      "description": "Color for horizontal rules, diff card borders and chart gridlines. Hex, rgb(), ansi256() or a name. Empty uses the theme.",
       "default": ""
     },
     "bulletColor": {
@@ -273,6 +273,13 @@
       "title": "Bullets",
       "description": "Color for list bullets and numbers. Hex, rgb(), ansi256() or a name. Empty uses the theme.",
       "default": ""
+    },
+    "diffStyle": {
+      "type": "string",
+      "title": "Diff style",
+      "description": "How edit and shell edit diffs draw. card: a rounded box with tinted lines. full: no box, each changed line tinted across the width. marks: no box and no tint, changed lines in the number and flag colors. bar: no box and no tint, a colored ▌ before each changed line.",
+      "default": "card",
+      "options": ["card", "full", "marks", "bar"]
     },
     "mermaid": {
       "type": "boolean",

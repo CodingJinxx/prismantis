@@ -11,7 +11,7 @@ import { clipboardCommand } from './clipboard'
 import { FIGURE_HINT } from './figure'
 import { drawDiagrams } from './mermaid'
 import type { Fold } from './render'
-import { isReadOnlyCall, remember, rememberCall, renderBlocks, renderDiffCard, renderExpandedShell, renderFailure, renderShellResult, renderToolGroup, renderToolRow, renderTurnDuration, renderUserPrompt, takesEditorLinks, takesHttpLinks } from './render'
+import { bashEdits, editNotes, hasShellOutput, isReadOnlyCall, remember, rememberCall, renderBashEdits, renderBlocks, renderDiffCard, renderExpandedShell, renderFailure, renderShellResult, renderToolGroup, renderToolRow, renderTurnDuration, renderUserPrompt, takesEditorLinks, takesHttpLinks, withoutBashEdits } from './render'
 import { helpText, rtlShowcaseText, showcaseText } from './help'
 import { PRESET_NAMES } from './presets'
 import type { Style } from './theme'
@@ -289,9 +289,19 @@ export const register: Register = (on, options) => {
   const fullWidth = (text: string) => (style.reorder && hasRtl(text) ? { width: '100%' as const } : {})
 
   const quiet = style.toolOutput === 'quiet'
+  const shellCommands = new Map<string, string>()
+  const noteCommand = (id: string | undefined, tool: string, input: unknown) => {
+    const command = tool === 'Bash' && input !== null && typeof input === 'object' ? (input as { command?: unknown }).command : undefined
+    if (!id || typeof command !== 'string') return
+    shellCommands.delete(id)
+    shellCommands.set(id, command)
+    if (shellCommands.size > 500) shellCommands.delete(shellCommands.keys().next().value!)
+  }
+  let firstEdit: string | undefined
   if (options.toolRows !== false) {
     on('ui.render', { component: 'ToolGroup' }, async ($, e, next) => {
       await locate($, style)
+      for (const call of e.props.calls) noteCommand(call.tool_use_id, call.tool, call.input)
       if (quiet) for (const call of e.props.calls) if (call.tool_use_id && isReadOnlyCall(call.tool, call.input)) rememberCall(readOnlyCalls, call.tool_use_id)
       if (e.props.isExpanded) {
         for (const call of e.props.calls) if (call.tool_use_id) rememberCall(expandedCalls, call.tool_use_id, 500)
@@ -301,6 +311,7 @@ export const register: Register = (on, options) => {
     })
     on('ui.render', { component: 'ToolUse' }, async ($, e, next) => {
       await locate($, style)
+      noteCommand(e.props.tool_use_id, e.props.tool, e.props.input)
       if (quiet && isReadOnlyCall(e.props.tool, e.props.input)) rememberCall(readOnlyCalls, e.props.tool_use_id)
       if (!expandedCalls.has(e.props.tool_use_id)) return renderToolRow($.ui.resolve(e), fit(e.viewport), e.props, e.viewport?.columns)
       const shell = e.props.tool === 'Bash' || e.props.tool === 'PowerShell'
@@ -310,6 +321,17 @@ export const register: Register = (on, options) => {
       if ((e.props.tool === 'Edit' || e.props.tool === 'Write') && !e.props.isErrored) {
         const el = $.ui.resolve(e)
         return renderDiffCard(el, fit(e.viewport), e.props.output, folder($, el, await read($, unfolded)), e.props.tool_use_id) ?? next(e)
+      }
+      const edits = e.props.tool === 'Bash' && !e.props.isErrored ? bashEdits(e.props.output) : undefined
+      if (edits) {
+        await locate($, style)
+        const el = $.ui.resolve(e)
+        const output = withoutBashEdits(e.props.output)
+        const above = !hasShellOutput(output) ? null : quiet ? renderShellResult(el, fit(e.viewport), output) : await next({ ...e, props: { ...e.props, output } })
+        firstEdit ??= e.props.tool_use_id
+        const notes = editNotes(edits, firstEdit === e.props.tool_use_id, shellCommands.get(e.props.tool_use_id))
+        const cards = renderBashEdits(el, fit(e.viewport), edits, folder($, el, await read($, unfolded)), e.props.tool_use_id, above !== null, notes)
+        return above === null ? cards : <el.Box flexDirection="column">{above}{cards}</el.Box>
       }
       if (!quiet) return next(e)
       await locate($, style)
