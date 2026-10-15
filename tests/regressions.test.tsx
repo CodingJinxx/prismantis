@@ -5,10 +5,10 @@ import { helpText, showcaseText } from '../hooks/help'
 import { inlineText, parse } from '../hooks/markdown'
 import { tableHtml, tableText } from '../hooks/html'
 import { inlineMarks, mermaidText, shortenEdgeLabels } from '../hooks/mermaid'
-import { isReadOnlyCall, tableArt, takesEditorLinks, takesHttpLinks, width } from '../hooks/render'
+import { isReadOnlyCall, tableArt, takesClickableMarks, takesEditorLinks, takesHttpLinks, width } from '../hooks/render'
 import { PRESETS } from '../hooks/presets'
 import { claudeAt, linksHttp } from './claude-version'
-import { clipboardEnv, recordCopies } from './clipboard-env'
+import { clipboardEnv, recordCopies, recordToasts } from './clipboard-env'
 
 const hl = { numbers: true, paths: true }
 
@@ -352,6 +352,7 @@ test('the help screen shows every element prismantis draws', async () => {
   expect(blocks.some(b => b.kind === 'list' && b.items.some(i => i.task === true) && b.items.some(i => i.task === false) && b.items.some(i => i.depth > 0 && i.task !== undefined))).toBe(true)
   expect(kinds.has('notes')).toBe(true)
   expect(blocks.some(b => b.kind === 'table' && b.header.some(h => h.some(n => n.kind === 'footnote')))).toBe(true)
+  expect(showcaseText([])).toContain('Click a mark to see its note')
   expect(showcaseText([]).includes("toolStyle")).toBe(true)
   expect(showcaseText([]).includes("toolOutput")).toBe(true)
   expect(showcaseText([])).toContain('copyButtonStyle')
@@ -801,27 +802,114 @@ test('footnotes number by first reference, collect at the end, and undefined one
   expect(parse('plain [^1] text', hl)[0]).toMatchObject({ kind: 'paragraph' })
 })
 
+const CLICKABLE = '2.1.295'
+const NOTED = 'Fast[^a].\n\n[^a]: Measured twice.'
+const DEMO = { plugin: 'prismantis', component: 'CommandOutput' as const, props: { command: 'prismantis', args: 'demo', text: showcaseText([]), isErrored: false }, viewport: { columns: 120, rows: 40 } }
+type DrawnNode = { hover?: { scope?: string }; children?: unknown[] }
+const hoverScopes = (node: DrawnNode): string[] => [
+  ...(node.hover?.scope ? [node.hover.scope] : []),
+  ...(node.children ?? []).flatMap(child => (child && typeof child === 'object' ? hoverScopes(child as DrawnNode) : [])),
+]
+
 for (const surface of ['terminal', 'desktop'] as const) {
   test(`footnote marks and the notes block draw on ${surface}`, async ($) => {
     const ui = await $.ui.mount({ ...mount('Fast[^a].\n\n[^a]: Measured twice.'), surface })
     expect(await ui.find({ type: 'Text', text: /^¹$/ })).toBeDefined()
-    expect(await ui.find({ type: 'Text', text: /¹ Measured twice\./ })).toBeDefined()
+    expect(await ui.find({ text: /^¹ Measured twice\.$/ })).toBeDefined()
     await ui.unmount()
   })
 
-  for (const tableStyle of ['box', 'rules'] as const) {
-    test(`footnote marks in table cells draw in the paragraph mark color on ${surface}, ${tableStyle}`, { options: { tableStyle } }, async ($) => {
-      const accent = PRESETS['catppuccin-mocha'].accent
-      const ui = await $.ui.mount({ ...mount('Fast[^a].\n\n| Metric[^b] | **Value**[^c] | A long header that has to wrap[^a] |\n|---|---|---|\n| p99[^a] | 40ms[^b] | x |\n\n[^a]: A.\n[^b]: B.\n[^c]: C.', 40), surface })
-      const marks = await ui.findAll({ type: 'Text', text: /^[¹²³]$/ })
-      expect(new Set(marks.map(m => m.text))).toEqual(new Set(['¹', '²', '³']))
-      expect(marks.filter(m => m.props.color !== accent).map(m => m.text)).toEqual([])
-      expect(marks.length).toBe(6)
-      expect((await ui.find({ type: 'Text', text: /^Metric²$/ }))?.props).toMatchObject({ bold: true, color: PRESETS['catppuccin-mocha'].tableHeader })
+  test(`two identical replies light only their own footnote marks on ${surface}`, async ($) => {
+    const scopes: string[][] = []
+    for (const requestId of ['m1', 'm2']) {
+      const ui = await $.ui.mount({ ...mount(NOTED), surface, requestId })
+      scopes.push(hoverScopes((await ui.drawn()) as DrawnNode))
       await ui.unmount()
-    })
+    }
+    expect(scopes.map(s => s.length)).toEqual([2, 2])
+    expect(scopes.map(s => new Set(s).size)).toEqual([1, 1])
+    expect(scopes[1]!.some(s => scopes[0]!.includes(s))).toBe(false)
+  })
+
+  test(`/prismantis demo run twice lights only its own footnote marks on ${surface}`, async ($) => {
+    const scopes: string[][] = []
+    for (const requestId of ['c1', 'c2']) {
+      const ui = await $.ui.mount({ ...DEMO, surface, requestId })
+      scopes.push(hoverScopes((await ui.drawn()) as DrawnNode))
+      await ui.unmount()
+    }
+    expect(scopes.map(s => s.length)).toEqual([6, 6])
+    expect(scopes.map(s => new Set(s).size)).toEqual([3, 3])
+    expect(scopes[1]!.some(s => scopes[0]!.includes(s))).toBe(false)
+  })
+
+  for (const tableStyle of ['box', 'rules'] as const) {
+    for (const base of [undefined, CLICKABLE]) {
+      test(`footnote marks in table cells draw in the paragraph mark color on ${surface}, ${tableStyle}${base ? `, Claude Code ${base}` : ''}`, { options: { tableStyle } }, async ($, on) => {
+        if (base) claudeAt(on, base)
+        if (base && !(await linksHttp($.ui.mount({ ...mount(NOTED), surface })))) return
+        const accent = PRESETS['catppuccin-mocha'].accent
+        const ui = await $.ui.mount({ ...mount('Fast[^a].\n\n| Metric[^b] | **Value**[^c] | A long header that has to wrap[^a] |\n|---|---|---|\n| p99[^a] | 40ms[^b] | x |\n\n[^a]: A.\n[^b]: B.\n[^c]: C.', 40), surface })
+        const marks = await ui.findAll({ type: 'Text', text: /^[¹²³]$/ })
+        expect(new Set(marks.map(m => m.text))).toEqual(new Set(['¹', '²', '³']))
+        expect(marks.filter(m => m.props.color !== accent).map(m => m.text)).toEqual([])
+        expect(marks.length).toBe(6)
+        const header = await ui.findAll({ type: 'Text', text: /^Metric²?$/ })
+        expect(header.some(h => h.props.bold === true && h.props.color === PRESETS['catppuccin-mocha'].tableHeader)).toBe(true)
+        await ui.unmount()
+      })
+    }
   }
+
+  test(`footnote marks stay plain text before Claude Code 2.1.295 on ${surface}`, async ($, on) => {
+    claudeAt(on, '2.1.294')
+    const ui = await $.ui.mount({ ...mount('Fast[^a].\n\n| M[^a] | V |\n|---|---|\n| x | 1 |\n\n[^a]: Measured twice.'), surface })
+    expect(await ui.findAll({ type: 'Button', text: /^¹$/ })).toEqual([])
+    expect((await ui.findAll({ type: 'Text', text: /^¹$/ })).map(m => m.props.color)).toEqual([PRESETS['catppuccin-mocha'].accent, PRESETS['catppuccin-mocha'].accent])
+    await ui.unmount()
+  })
+
+  test(`a click on a footnote mark in a sentence, list, quote or table shows its note on ${surface}`, async ($, on) => {
+    claudeAt(on, CLICKABLE)
+    const toasts = recordToasts(on)
+    if (!(await linksHttp($.ui.mount({ ...mount(NOTED), surface })))) return
+    const ui = await $.ui.mount({ ...mount('Fast[^a] and steady.\n\n- Cold[^b] start\n\n> Quiet[^a] release.\n\n| M | V |\n|---|---|\n| p99 | 40ms[^b] |\n\n[^a]: Measured twice.\n[^b]: First request.'), surface })
+    const marks = await ui.findAll({ type: 'Button', text: /^[¹²]$/ })
+    expect(marks.map(m => m.text)).toEqual(['¹', '²', '¹', '²'])
+    for (const mark of marks) await ui.press({ key: mark.key! })
+    expect(toasts).toEqual(['¹ Measured twice.', '² First request.', '¹ Measured twice.', '² First request.'])
+    expect((await ui.find({ type: 'Text', text: /^Quiet$/ }))?.props).toMatchObject({ italic: true, color: PRESETS['catppuccin-mocha'].quote })
+    await ui.unmount()
+  })
+
+  test(`a mark after a word wider than the line stays at the word's end on ${surface}`, async ($, on) => {
+    claudeAt(on, CLICKABLE)
+    if (!(await linksHttp($.ui.mount({ ...mount(NOTED), surface })))) return
+    const long = 'supercalifragilisticexpialidocious-extra-long-token'
+    const ui = await $.ui.mount({ ...mount(`Token ${long}[^a] here.\n\n- item ${long}[^a] end\n\n[^a]: The long token.`, 40), surface })
+    const words = (await ui.findAll({ type: 'Box' })).filter(b => b.props.flexShrink === 0 && b.text.includes('¹'))
+    expect(words.map(w => w.text.trim().endsWith('token¹'))).toEqual([true, true])
+    expect(words.filter(w => width(w.text.trimEnd()) > 38).map(w => w.text)).toEqual([])
+    await ui.unmount()
+  })
+
+  test(`/prismantis demo footnote marks are clickable on ${surface}`, async ($, on) => {
+    claudeAt(on, CLICKABLE)
+    const toasts = recordToasts(on)
+    if (!(await linksHttp($.ui.mount({ ...mount(NOTED), surface })))) return
+    const ui = await $.ui.mount({ ...DEMO, surface })
+    const marks = await ui.findAll({ type: 'Button', text: /^[¹²³]$/ })
+    expect(marks.map(m => m.text)).toEqual(['¹', '²', '³'])
+    await ui.press({ key: marks[0]!.key! })
+    expect(toasts).toEqual(['¹ Counted at close.'])
+    await ui.unmount()
+  })
 }
+
+test('footnote clicks need Claude Code 2.1.295 or later', () => {
+  const versions = ['2.1.287', '2.1.294', '2.1.295', '2.1.296-dev.20261013.t101500.sha1a2b3c4', '2.2.0', '3.0.0', '1.9.999', 'dev']
+  expect(versions.map(takesClickableMarks)).toEqual([false, false, true, true, true, true, false, false])
+})
 
 const chartRows = async (ui: { findAll: (q: { type: 'Text' }) => Promise<{ text: string }[]> }) => {
   const texts = (await ui.findAll({ type: 'Text' })).map(t => t.text)

@@ -11,7 +11,7 @@ import { clipboardCommand } from './clipboard'
 import { FIGURE_HINT } from './figure'
 import { drawDiagrams } from './mermaid'
 import type { Fold } from './render'
-import { bashEdits, drawMath, editNotes, hasShellOutput, isReadOnlyCall, remember, rememberCall, renderBashEdits, renderBlocks, renderDiffCard, renderExpandedShell, renderFailure, renderShellResult, renderToolGroup, renderToolRow, renderTurnDuration, renderUserPrompt, takesEditorLinks, takesHttpLinks, withoutBashEdits } from './render'
+import { bashEdits, drawMath, editNotes, hasShellOutput, instanceKey, isReadOnlyCall, noteTip, remember, rememberCall, renderBashEdits, renderBlocks, renderDiffCard, renderExpandedShell, renderFailure, renderShellResult, renderToolGroup, renderToolRow, renderTurnDuration, renderUserPrompt, takesClickableMarks, takesEditorLinks, takesHttpLinks, withoutBashEdits } from './render'
 import { HINT, helpText, rtlShowcaseText, showcaseText } from './help'
 import { PRESET_NAMES } from './presets'
 import type { Style } from './theme'
@@ -192,12 +192,12 @@ const htmlBackend = async ($: EngineInterface): Promise<ClipboardBackend | null>
   return await $.env.get('WAYLAND_DISPLAY') || await $.env.get('DISPLAY') ? 'linux' : null
 }
 
-type LinkReach = { http: boolean; editor: boolean }
+type LinkReach = { http: boolean; editor: boolean; marks: boolean }
 
 type Probes = { terminal?: Promise<Terminal | null>; htmlCopy?: Promise<ClipboardBackend | null>; links?: Promise<LinkReach> }
 
 const linkReach = ($: EngineInterface, probes: Probes): Promise<LinkReach> =>
-  (probes.links ??= $.session.version().then(v => ({ http: takesHttpLinks(v.base), editor: takesEditorLinks(v.base) }), () => ({ http: false, editor: false })))
+  (probes.links ??= $.session.version().then(v => ({ http: takesHttpLinks(v.base), editor: takesEditorLinks(v.base), marks: takesClickableMarks(v.base) }), () => ({ http: false, editor: false, marks: false })))
 
 const probe = async ($: EngineInterface, style: Style, probes: Probes): Promise<Terminal | null> => {
   probes.terminal ??= applyRtl($, style)
@@ -222,7 +222,7 @@ const folder = ($: EngineInterface, el: ReturnType<EngineInterface['ui']['resolv
   return { folded, element: <el.Button key={key} variant="secondary" label={folded ? `+${hidden} more lines` : 'show less'} onPress={() => update($, unfolded, ids => (folded ? [...ids, id].slice(-500) : ids.filter(x => x !== id)))} /> }
 }
 
-const drawMarkdown = ($: EngineInterface, el: ReturnType<EngineInterface['ui']['resolve']>, style: Style, blocks: ReturnType<typeof parse>, columns: number, math: Map<number, Typeset> = new Map(), reply?: string, open?: string[]): RenderElement[] => {
+const drawMarkdown = ($: EngineInterface, el: ReturnType<EngineInterface['ui']['resolve']>, style: Style, blocks: ReturnType<typeof parse>, columns: number, math: Map<number, Typeset> = new Map(), reply?: string, open?: string[], notes?: { id: string; press: boolean }): RenderElement[] => {
   const { Button } = el
   const copy = (text: string | (() => string), key: string, label = '⧉ copy', html?: () => string) => {
     const copied = async (surface: RenderSurface): Promise<string> => {
@@ -251,7 +251,8 @@ const drawMarkdown = ($: EngineInterface, el: ReturnType<EngineInterface['ui']['
       if (picked) drawn.set(i, { element: <Image key={`b${i}`} source={{ png: picked.picture.png }} columns={picked.fit.columns} rows={picked.fit.rows} alt={formula.tex} /> })
     }
   }
-  const elements = renderBlocks(el, style, blocks, columns, drawMath(el, style, blocks, drawn), copy, folder($, el, open))
+  const tip = notes?.press ? noteTip(blocks, text => void $.ui.toast(text)) : undefined
+  const elements = renderBlocks(el, notes ? { ...style, noteKey: instanceKey(notes.id) } : style, blocks, columns, drawMath(el, style, blocks, drawn), copy, folder($, el, open), tip)
   const button = reply === undefined ? null : copy(reply, 'reply', '⧉ copy reply')
   if (!button) return elements
   return style.copyButtonStyle === 'hover'
@@ -410,8 +411,9 @@ export const register: Register = (on, options) => {
     const { Box } = el
     const math = await mathOfBlocks($, latex, e.surface, blocks)
     const open = await read($, unfolded)
-    const surfaceStyle = forSurface(fit(e.viewport), e.surface, await linkReach($, probes))
-    return <Box flexDirection="column" rowGap={1} {...fullWidth(e.props.text)}>{drawMarkdown($, el, surfaceStyle, blocks, columnsOf(e.viewport), math, undefined, open)}</Box>
+    const reach = await linkReach($, probes)
+    const surfaceStyle = forSurface(fit(e.viewport), e.surface, reach)
+    return <Box flexDirection="column" rowGap={1} {...fullWidth(e.props.text)}>{drawMarkdown($, el, surfaceStyle, blocks, columnsOf(e.viewport), math, undefined, open, { id: e.requestId, press: reach.marks })}</Box>
   })
 
   on('ui.render', { component: 'UserMessage' }, async ($, e, next) => {
@@ -431,7 +433,8 @@ export const register: Register = (on, options) => {
     const { Box, Text } = el
     const narration = style.toolStyle === 'tree-bold' && blocks.length === 1 && blocks[0]!.kind === 'paragraph'
     const math = await mathOfBlocks($, latex, e.surface, blocks)
-    const surfaceStyle = forSurface(fit(e.viewport), e.surface, await linkReach($, probes))
+    const reach = await linkReach($, probes)
+    const surfaceStyle = forSurface(fit(e.viewport), e.surface, reach)
     const open = await read($, unfolded)
     return (
       <Box key="msg" flexDirection="row">
@@ -439,7 +442,7 @@ export const register: Register = (on, options) => {
           <Text color={style.theme.accent}>{e.props.isFirstOfReply ? '●' : ' '}</Text>
         </Box>
         <Box flexDirection="column" rowGap={1} flexGrow={1}>
-          {drawMarkdown($, el, narration ? { ...surfaceStyle, narration } : surfaceStyle, blocks, columnsOf(e.viewport), math, blocks.length > 1 || hasRtl(e.props.text) ? e.props.text : undefined, open)}
+          {drawMarkdown($, el, narration ? { ...surfaceStyle, narration } : surfaceStyle, blocks, columnsOf(e.viewport), math, blocks.length > 1 || hasRtl(e.props.text) ? e.props.text : undefined, open, { id: e.requestId, press: reach.marks })}
         </Box>
       </Box>
     )

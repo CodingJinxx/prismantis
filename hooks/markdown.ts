@@ -9,7 +9,9 @@ export type Inline =
   | { kind: 'number'; text: string }
   | { kind: 'path'; text: string }
   | { kind: 'dim'; text: string }
-  | { kind: 'footnote'; text: string }
+  | { kind: 'footnote'; text: string; note?: number }
+
+export type Note = { mark: string; inline: Inline[]; note: number }
 
 export type Block = { raw: string } & (
   | { kind: 'heading'; level: number; inline: Inline[] }
@@ -20,7 +22,7 @@ export type Block = { raw: string } & (
   | { kind: 'alert'; level: AlertLevel; blocks: Block[] }
   | { kind: 'rule' }
   | { kind: 'table'; header: Inline[][]; align: ('left' | 'right' | 'center')[]; rows: Inline[][][] }
-  | { kind: 'notes'; notes: { mark: string; inline: Inline[] }[] }
+  | { kind: 'notes'; notes: Note[] }
 )
 
 export type ListItem = { marker: string; depth: number; task?: boolean; inline: Inline[]; blocks?: Block[] }
@@ -235,7 +237,7 @@ const numberNotes = (blocks: Block[], defs: Map<string, string>, hl: Highlight):
     else if ('children' in n) seen(n.children)
   })
   const fix = (nodes: Inline[]): Inline[] => nodes.map(n =>
-    n.kind === 'footnote' ? (order.has(n.text) ? { kind: 'footnote', text: markOf(order.get(n.text)!) } : { kind: 'text', text: `[^${n.text}]` })
+    n.kind === 'footnote' ? (order.has(n.text) ? { kind: 'footnote', text: markOf(order.get(n.text)!), note: order.get(n.text)! } : { kind: 'text', text: `[^${n.text}]` })
     : 'children' in n ? { ...n, children: fix(n.children) } : n)
   const mapInlines = (b: Block, f: (nodes: Inline[]) => Inline[]): Block =>
     'inline' in b ? { ...b, inline: f(b.inline) }
@@ -246,7 +248,7 @@ const numberNotes = (blocks: Block[], defs: Map<string, string>, hl: Highlight):
   blocks.forEach(b => mapInlines(b, nodes => (seen(nodes), nodes)))
   for (const label of defs.keys()) if (!order.has(label)) order.set(label, order.size + 1)
   const out = blocks.map(b => mapInlines(b, fix))
-  const notes = [...defs].sort(([a], [b]) => order.get(a)! - order.get(b)!).map(([label, text]) => ({ mark: markOf(order.get(label)!), inline: fix(parseInline(text, hl)) }))
+  const notes = [...defs].sort(([a], [b]) => order.get(a)! - order.get(b)!).map(([label, text]) => ({ mark: markOf(order.get(label)!), inline: fix(parseInline(text, hl)), note: order.get(label)! }))
   return defs.size ? [...out, { kind: 'notes', notes, raw: '' }] : out
 }
 
