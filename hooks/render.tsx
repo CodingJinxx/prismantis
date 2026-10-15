@@ -833,13 +833,26 @@ export const contrast = (a: string, b: string): number => {
 
 const TEXT_CONTRAST = 4.5
 
+export const fullHue = (hex: string): string => {
+  const [r, g, b] = channels(hex).map(v => v / 255) as [number, number, number]
+  const max = Math.max(r, g, b)
+  const spread = max - Math.min(r, g, b)
+  const lightness = (max + max - spread) / 2
+  if (spread === 0 || spread / (1 - Math.abs(2 * lightness - 1)) < 0.1) return hex
+  const sector = max === r ? ((g - b) / spread + 6) % 6 : max === g ? (b - r) / spread + 2 : (r - g) / spread + 4
+  const x = 1 - Math.abs((sector % 2) - 1)
+  const pure = [[1, x, 0], [x, 1, 0], [0, 1, x], [0, x, 1], [x, 0, 1], [1, 0, x]][Math.floor(sector)]!
+  return `#${pure.map(v => Math.round(v! * 255).toString(16).padStart(2, '0')).join('')}`
+}
+
 export const diffTint = (text: string | undefined, color: string | undefined): string | undefined => {
   if (!text || !color || !HEX.test(text) || !HEX.test(color)) return undefined
   const dark = contrast(text, '#000000') >= contrast(text, '#ffffff')
   const base = dark ? '#000000' : '#ffffff'
+  const hue = fullHue(color)
   let share = dark ? 0.3 : 0.2
-  while (share > 0.05 && contrast(text, tint(base, color, share)!) < TEXT_CONTRAST) share -= 0.01
-  return tint(base, color, share)
+  while (share > 0.05 && contrast(text, tint(base, hue, share)!) < TEXT_CONTRAST) share -= 0.01
+  return tint(base, hue, share)
 }
 
 export const diffLines = (output: unknown): DiffLine[] | undefined => {
@@ -874,18 +887,19 @@ const diffBox = (el: ElementTable, style: Style, rows: DiffLine[], fold: Fold, i
   const toggle = rows.length > DIFF_LINES ? fold?.(id, rows.length - DIFF_LINES, `fold${key}`) : null
   const shown = rows.slice(0, toggle?.folded === false ? DIFF_MAX : DIFF_LINES)
   const gutter = String(Math.max(0, ...shown.map(r => r.num))).length
-  const color = (mark: DiffLine['mark']) => (mark === '+' ? t.number : mark === '-' ? t.codeFlag : undefined)
+  const [addColor, removeColor] = [t.diffAdded ?? t.number, t.diffRemoved ?? t.codeFlag]
+  const color = (mark: DiffLine['mark']) => (mark === '+' ? addColor : mark === '-' ? removeColor : undefined)
   const look = style.diffStyle
   const tinted = look === 'card' || look === 'full'
-  const tints = { '+': tinted ? diffTint(t.codeText, t.number) : undefined, '-': tinted ? diffTint(t.codeText, t.codeFlag) : undefined, ' ': undefined }
+  const tints = { '+': tinted ? diffTint(t.codeText, addColor) : undefined, '-': tinted ? diffTint(t.codeText, removeColor) : undefined, ' ': undefined }
   const frame = look === 'card' ? { borderStyle: 'round', borderColor: t.rule, paddingX: 1 } : {}
   return (
     <Box key={`card${key}`} flexDirection="column" flexShrink={1} {...frame}>
       <Text>
         {title === undefined ? null : <Text color={t.path}>{`${title} `}</Text>}
-        <Text color={t.number} dimColor={added === 0}>{`+${added}`}</Text>
+        <Text color={addColor} dimColor={added === 0}>{`+${added}`}</Text>
         <Text> </Text>
-        <Text color={t.codeFlag} dimColor={removed === 0}>{`−${removed}`}</Text>
+        <Text color={removeColor} dimColor={removed === 0}>{`−${removed}`}</Text>
       </Text>
       {shown.map((r, i) => {
         const bg = tints[r.mark]

@@ -4,6 +4,14 @@ All notable changes to this project are documented here. The format follows [Kee
 
 ## [Unreleased]
 
+### Added
+
+- `diffAdded` and `diffRemoved` theme tokens hold each preset's own green and red for diffs, from its upstream palette: Rosé Pine's foam and love, Nord's nord14 and nord11, Dracula's green and red, Everforest's `#a7c080` and `#e67e80`, GitHub's git added and deleted colors. `diffAddedColor` and `diffRemovedColor` set them like any other token ([#152](https://github.com/NahumLitvin/prismantis/issues/152)).
+
+### Changed
+
+- Diff lines tint from the theme's `diffAdded` and `diffRemoved` instead of its number and flag colors, taking the color's hue at full strength before the 30% black or 20% white mix, so they read bolder (`catppuccin-mocha`'s added lines go from `#324430` to `#064d00`). The `+N −M` counts and the `+` and `−` marks take the same two colors. In `rose-pine-dawn`, `everforest`, `gruvbox-light`, `dracula`, `rose-pine` and `nord`, whose number and flag colors are two pinks, purples or blues, added and removed lines were hard to tell apart (ΔE 2.6 to 11.5); every preset now keeps them at least ΔE 26 apart with code text at 4.5:1 or more, checked by a test ([#152](https://github.com/NahumLitvin/prismantis/issues/152)).
+
 ### Fixed
 
 - `codex plugin add prismantis@prismantis` installs the plugin. Codex 0.162 skips a marketplace entry whose source is `github`, the form Claude Code uses, and reported "plugin `prismantis` was not found". The repo now also ships `.agents/plugins/marketplace.json`, which Codex reads first, with the same release pinned as a git `url` source. Claude Code still reads its own marketplace and installs as before.
