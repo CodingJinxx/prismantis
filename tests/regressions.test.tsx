@@ -153,10 +153,12 @@ for (const [kind, cell] of [
   test(`a boxed row with a ${kind} keeps the link whole and clips its borders to the row`, async $ => {
     const ui = await $.ui.mount(mount(`| n | link |\n|---|---|\n| 1 | ${cell} |`, 40))
     const links = await ui.findAll({ type: 'Link' })
-    const clips = (await ui.findAll({ type: 'Box' })).filter(b => b.props.position === 'absolute' && b.props.overflow === 'hidden')
+    const boxes = await ui.findAll({ type: 'Box' })
+    const clips = boxes.filter(b => b.props.overflow === 'hidden' && b.props.height === 0)
     expect(links.length).toBe(1)
     expect(clips.length).toBe(3)
     expect(clips.every(b => drawn(b).split('\n').length > 2)).toBe(true)
+    expect(boxes.some(b => b.props.position === 'absolute' && drawn(b).includes('│'))).toBe(false)
     await ui.unmount()
   })
 }
@@ -288,9 +290,10 @@ const best = (fn: () => void, runs = 5) => {
 
 const rows = (n: number) => `| id | name | pods |\n|---|---|---|\n${Array.from({ length: n }, (_, i) => `| ${i} | svc-${i} | ${i * 3} |`).join('\n')}`
 const prose = (n: number) => Array.from({ length: n }, (_, i) => `Paragraph ${i} with **bold**, \`code\`, 99.9% and ~/src/app.ts here.\n\n- item ${i}\n- item ${i + 1}`).join('\n\n')
+const quoted = (n: number) => prose(n).split('\n').map((line, i) => `${i % 3 ? '> > ' : '> '}${line}`).join('\n')
 
 test('parse cost grows linearly with reply size', async () => {
-  for (const make of [rows, prose]) {
+  for (const make of [rows, prose, quoted]) {
     parse(make(200), hl)
     const small = Math.max(best(() => parse(make(200), hl)), 0.05)
     const large = best(() => parse(make(2000), hl))
@@ -319,7 +322,7 @@ test('a 400-line highlighted code block stays under the engine node limit and it
 })
 
 test('a half-streamed reply with an open fence and a cut table still draws', async $ => {
-  for (const text of ['intro\n\n```mermaid\nflowchart LR\n  A --> B', '| a | b |\n|---|', '```ts\nconst x =', '> [!NOTE', '**bold and `cod']) {
+  for (const text of ['intro\n\n```mermaid\nflowchart LR\n  A --> B', '| a | b |\n|---|', '```ts\nconst x =', '> [!NOTE', '**bold and `cod', '> - item\n> ```ts\n> const x =', '> | a | b |\n> |---|', '> > [!NOTE', '> [!TIP]\n>']) {
     const ui = await $.ui.mount(mount(text))
     expect(await ui.findAll({ type: 'Text' })).toBeDefined()
     await ui.unmount()
@@ -337,6 +340,7 @@ test('the help screen shows every element prismantis draws', async () => {
   expect(blocks.some(b => b.kind === 'table' && b.align.includes('right') && b.align.includes('center'))).toBe(true)
   const kinds = new Set(blocks.map(b => b.kind))
   for (const kind of ['heading', 'paragraph', 'list', 'code', 'quote', 'alert', 'rule', 'table']) expect(kinds.has(kind as never)).toBe(true)
+  expect(blocks.some(b => b.kind === 'quote' && b.blocks.filter(c => c.kind === 'paragraph').length >= 2 && b.blocks.some(c => c.kind === 'list') && b.blocks.some(c => c.kind === 'quote'))).toBe(true)
   expect(new Set(blocks.flatMap(b => (b.kind === 'heading' ? [b.level] : []))).size >= 4).toBe(true)
   expect(new Set(blocks.flatMap(b => (b.kind === 'alert' ? [b.level] : []))).size).toBe(5)
   const langs = blocks.flatMap(b => (b.kind === 'code' ? [b.lang] : []))
@@ -1036,4 +1040,171 @@ test('localhost links with a query or a hash stay clickable on desktop', async $
 test('a footnote definition inside a four-backtick fence stays code', async () => {
   const blocks = parse('````text\n```\n[^x]: inside code\n````\n\nSee[^x]', hl)
   expect(blocks.some(b => b.kind === 'notes')).toBe(false)
+})
+
+const exact = (text: string) => new RegExp(`^${text.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}$`)
+
+const barLines = async (ui: { findAll: (query: { type: string; text: RegExp }) => Promise<{ text: string }[]> }) =>
+  (await ui.findAll({ type: 'Text', text: /^(│ \n)*│ $/ })).map(bar => bar.text.split('\n').length)
+
+const DRAFT = [
+  '> Yeah agreed, definitely a POC. It does check the dispatcher which nothing else does right now.',
+  '>',
+  '> It also does a few things worth carrying into whatever replaces it:',
+  "> - **RoutableServiceNames** reproduces 0.2.0's grammar from reading `dispatcher.py`.",
+  "> - That routing check doesn't need a server.",
+  '>',
+  '> The rest is fine to drop.',
+  '>',
+  '> *-- Drafted with Claude (Opus 5.5)*',
+].join('\n')
+
+for (const surface of ['terminal', 'desktop'] as const) test(`a quote keeps its paragraphs, list rows and styling on ${surface}`, async ($, on) => {
+  const copied = stubClipboard(on)
+  const t = PRESETS['catppuccin-mocha']
+  const ui = await $.ui.mount({ ...mount(DRAFT), surface })
+  for (const text of ['Yeah agreed, definitely a POC. It does check the dispatcher which nothing else does right now.', 'It also does a few things worth carrying into whatever replaces it:', 'The rest is fine to drop.', '-- Drafted with Claude (Opus 5.5)']) {
+    expect((await ui.find({ type: 'Text', text: exact(text) }))?.props).toMatchObject({ italic: true, color: t.quote })
+  }
+  expect(await ui.findAll({ type: 'Text', text: /^• $/ })).toHaveLength(2)
+  expect(await ui.find({ type: 'Text', text: exact("RoutableServiceNames reproduces 0.2.0's grammar from reading dispatcher.py.") })).toBeDefined()
+  expect(await ui.find({ type: 'Text', text: exact("That routing check doesn't need a server.") })).toBeDefined()
+  expect((await ui.find({ type: 'Text', text: /^RoutableServiceNames$/ }))?.props).toMatchObject({ bold: true, color: t.strong })
+  expect((await ui.find({ type: 'Text', text: /^dispatcher\.py$/ }))?.props.color).toBe(t.inlineCode)
+  expect(Math.max(...(await barLines(ui))) >= 10).toBe(true)
+  const buttons = await ui.findAll({ type: 'Button' })
+  expect(buttons.map(b => b.props.label)).toEqual(['⧉ copy'])
+  await ui.press({ key: buttons[0]!.key! })
+  expect(copied).toEqual([DRAFT.split('\n').map(line => line.replace(/^>\s?/, '')).join('\n')])
+  await ui.unmount()
+})
+
+for (const surface of ['terminal', 'desktop'] as const) test(`a nested quote draws with its own bar inside the outer one on ${surface}`, async $ => {
+  const ui = await $.ui.mount({ ...mount('> outer\n>\n> > inner one\n> > inner two\n>\n> after'), surface })
+  for (const text of [/^outer$/, /^inner one inner two$/, /^after$/]) expect(await ui.find({ type: 'Text', text })).toBeDefined()
+  expect(await ui.find({ type: 'Box', text: /^│ inner one inner two$/ })).toBeDefined()
+  expect(Math.max(...(await barLines(ui))) >= 5).toBe(true)
+  await ui.unmount()
+})
+
+for (const surface of ['terminal', 'desktop'] as const) test(`an alert keeps a list in its body on ${surface}`, async ($, on) => {
+  const copied = stubClipboard(on)
+  const source = '> [!NOTE]\n> Before you merge:\n> - run the tests\n> - update the CHANGELOG'
+  const ui = await $.ui.mount({ ...mount(source), surface })
+  expect(await ui.find({ type: 'Text', text: /^Note$/ })).toBeDefined()
+  expect(await ui.find({ type: 'Text', text: /^Before you merge:$/ })).toBeDefined()
+  expect(await ui.findAll({ type: 'Text', text: /^• $/ })).toHaveLength(2)
+  for (const text of [/^run the tests$/, /^update the CHANGELOG$/]) expect(await ui.find({ type: 'Text', text })).toBeDefined()
+  expect((await ui.findAll({ type: 'Box' })).find(b => b.props.borderStyle === 'round')?.text).toContain('update the CHANGELOG')
+  const buttons = await ui.findAll({ type: 'Button' })
+  expect(buttons.map(b => b.props.label)).toEqual(['⧉ copy'])
+  await ui.press({ key: buttons[0]!.key! })
+  expect(copied).toEqual(['[!NOTE]\nBefore you merge:\n- run the tests\n- update the CHANGELOG'])
+  await ui.unmount()
+})
+
+for (const surface of ['terminal', 'desktop'] as const) test(`a code block and a table inside a quote fit beside the bar and copy their own source on ${surface}`, async ($, on) => {
+  const copied = stubClipboard(on)
+  const t = PRESETS['catppuccin-mocha']
+  const table = `| Check | Result |\n|---|---|\n| lint | ${'passes on every package '.repeat(4).trim()} |`
+  const source = `Before.\n\n> Run it:\n>\n> \`\`\`bash\n> npm test\n> \`\`\`\n>\n${table.split('\n').map(line => `> ${line}`).join('\n')}`
+  const ui = await $.ui.mount({ ...mount(source, 60), surface })
+  expect(await ui.find({ type: 'Text', text: /^── bash$/ })).toBeDefined()
+  expect((await ui.find({ type: 'Text', text: /^npm$/ }))?.props.color).toBe(t.codeCommand)
+  expect((await ui.find({ type: 'Text', text: /^Check$/ }))?.props.color).toBe(t.tableHeader)
+  const edge = await ui.find({ type: 'Text', text: /^┌[─┬]+┐$/ })
+  expect(width('│ ') + width(edge!.text) + 2 + width('[ ⧉ copy ]') <= 60 - 4).toBe(true)
+  const labels = (await ui.findAll({ type: 'Button' })).map(b => b.props.label)
+  expect(labels.filter(l => l === '⧉ copy')).toHaveLength(2)
+  expect(labels.filter(l => l === '⧉ md')).toHaveLength(1)
+  await ui.press({ key: 'b1.copy1' })
+  await ui.press({ key: 'b1.copy2' })
+  await ui.press({ key: 'reply' })
+  expect(copied).toEqual(['npm test', table, source])
+  await ui.unmount()
+})
+
+for (const surface of ['terminal', 'desktop'] as const) test(`footnotes number and links stay readable inside a quote on ${surface}`, async $ => {
+  const t = PRESETS['catppuccin-mocha']
+  const source = '> Intro.\n>\n> - Latency fell[^lat], see [run](javascript:alert(1)) and [docs](https://example.com).\n>\n> [^q]: Quoted note.\n\nAlso[^q].\n\n[^lat]: Median of 50 runs.'
+  const ui = await $.ui.mount({ ...mount(source), surface })
+  expect(await ui.find({ type: 'Text', text: /^Latency fell¹, see run \(javascript:alert\(1\)\) and / })).toBeDefined()
+  expect(await ui.find({ type: 'Text', text: /^run \(javascript:alert\(1\)\)$/ })).toBeDefined()
+  expect((await ui.find({ type: 'Text', text: /^¹$/ }))?.props.color).toBe(t.accent)
+  expect((await ui.findAll({ type: 'Link' })).map(l => l.props.href)).toEqual(['https://example.com'])
+  expect(await ui.find({ type: 'Text', text: /^Also²\.$/ })).toBeDefined()
+  expect(await ui.find({ type: 'Text', text: /^¹ Median of 50 runs\.$/ })).toBeDefined()
+  expect(await ui.find({ type: 'Text', text: /^² Quoted note\.$/ })).toBeDefined()
+  expect((await ui.find({ type: 'Box', key: 'b0' }))?.text).not.toContain('Quoted note')
+  await ui.unmount()
+})
+
+for (const copyButtons of [true, false]) test(`a quote ${copyButtons ? 'beside its copy button' : 'without a copy button'} sizes its bar for the width left`, { options: { copyButtons } }, async $ => {
+  const ui = await $.ui.mount(mount(`> ${'word '.repeat(10)}end`, 60))
+  expect(Math.max(...(await barLines(ui))) > 1).toBe(copyButtons)
+  await ui.unmount()
+})
+
+test('a quote bar covers a wrapped banner heading and its rule', { options: { headingStyle: 'banner', copyButtons: false } }, async $ => {
+  const ui = await $.ui.mount(mount(`> ## ${'A'.repeat(300)}`, 60))
+  expect(Math.max(...(await barLines(ui))) >= 2 * Math.ceil(300 / (60 - 4 - 2))).toBe(true)
+  await ui.unmount()
+})
+
+test('a quote bar covers a task list progress line that wraps', { options: { taskStyle: 'progress', copyButtons: false } }, async $ => {
+  const ui = await $.ui.mount(mount('> - [ ] x', 24))
+  expect(Math.max(...(await barLines(ui))) >= 3).toBe(true)
+  await ui.unmount()
+})
+
+for (const surface of ['terminal', 'desktop'] as const) test(`a quote bar stays in the flow, clipped to the quote's rows, on ${surface}`, async $ => {
+  const ui = await $.ui.mount({ ...mount(DRAFT), surface })
+  const boxes = await ui.findAll({ type: 'Box' })
+  const clips = boxes.filter(b => b.props.overflow === 'hidden' && b.props.height === 0 && b.props.flexGrow === 1)
+  expect(clips.some(b => /^(│ \n){9,}│ $/.test(drawn(b)))).toBe(true)
+  expect(boxes.some(b => b.props.position === 'absolute' && drawn(b).includes('│'))).toBe(false)
+  await ui.unmount()
+})
+
+test('footnotes follow quotes and fences: a quoted fence marker inside code makes no note, and an unclosed quoted fence hides none', async () => {
+  const marks = (source: string) => parse(source, hl).flatMap(b => (b.kind === 'notes' ? b.notes.map(n => `${n.mark} ${inlineText(n.inline)}`) : []))
+  expect(marks('```md\n> ```\n[^fake]: Not a real note\n```\n\nReal[^real].\n\n[^real]: Real note')).toEqual(['¹ Real note'])
+  expect(marks('> ```\n> [^x]: in code\n\nTop[^top].\n\n[^top]: Top note')).toEqual(['¹ Top note'])
+  expect(marks('> a[^q]\n>\n> > [^q]: Nested note\n> >   continued')).toEqual(['¹ Nested note continued'])
+})
+
+for (const copyButtonStyle of ['inline', 'hover'] as const) test(`a quote that opens with code puts its own ${copyButtonStyle} copy button on its last row`, { options: { copyButtonStyle } }, async $ => {
+  const ui = await $.ui.mount(mount('> ```bash\n> npm test\n> ```\n>\n> Run that first.\n\n> One line.'))
+  const boxes = await ui.findAll({ type: 'Box' })
+  const low = boxes.filter(b => (copyButtonStyle === 'hover' ? b.props.display === 'none' && b.props.bottom === 0 && b.props.left === 0 : b.props.alignSelf === 'flex-end' && b.key !== 'reply'))
+  expect(low.map(b => b.text)).toEqual(['⧉ copy'])
+  expect(boxes.filter(b => b.props.position === 'absolute' && b.props.top === 0 && b.props.display === 'none').map(b => b.text)).toEqual(copyButtonStyle === 'hover' ? ['⧉ copy', '⧉ copy'] : [])
+  await ui.unmount()
+})
+
+for (const surface of ['terminal', 'desktop'] as const) test(`display math inside a quote or a list item draws as text on ${surface}`, async $ => {
+  const ui = await $.ui.mount({ ...mount('> $$\n> E = mc^2 \\cdot \\alpha\n> $$\n\n- energy:\n  ```math\n  \\pi r^2\n  ```'), surface })
+  expect((await ui.find({ type: 'Text', text: /^E = mc² · α$/ }))?.props).toMatchObject({ italic: true, color: PRESETS['catppuccin-mocha'].emphasis })
+  expect(await ui.find({ type: 'Text', text: /^πr²$|^π r²$/ })).toBeDefined()
+  await ui.unmount()
+})
+
+test('a quote with nothing to draw is left out', async () => {
+  expect(parse('> [^q]: A note.\n\nSee[^q].', hl).map(b => b.kind)).toEqual(['paragraph', 'notes'])
+  expect(parse('>\n> \n\ntext', hl).map(b => b.kind)).toEqual(['paragraph'])
+  expect(parse('> [!NOTE]', hl).map(b => b.kind)).toEqual(['alert'])
+})
+
+test('quotes nested past eight levels keep their text and parse in linear time', async () => {
+  const started = Date.now()
+  const [block] = parse(`${'>'.repeat(20000)} deep`, hl)
+  expect(Date.now() - started < 100).toBe(true)
+  let depth = 0
+  let at = block
+  while (at?.kind === 'quote') {
+    depth++
+    at = at.blocks[0]
+  }
+  expect(depth).toBe(8)
+  expect(at?.kind === 'paragraph' && inlineText(at.inline).endsWith('> deep')).toBe(true)
 })
