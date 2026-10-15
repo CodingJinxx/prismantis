@@ -2,6 +2,12 @@
 
 All notable changes to this project are documented here. The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and the project uses [Semantic Versioning](https://semver.org/).
 
+## [Unreleased]
+
+### Added
+
+- Codex: installing prismantis in Codex gives it the same model note as Claude Code, plus what Codex's own renderer cannot draw, so replies come back with tables, fenced commands, mermaid sized for Codex and text figures. `$prismantis` shows the demo, and `$prismantis-themes` installs the 16 themes as Codex syntax themes, which color code, inline code, table headers and mermaid boxes; `/theme` picks one. Prose, headings and copy buttons stay Codex's own. Codex asks you to trust the hook once in `/hooks`. Everything in it is generated from the Claude Code side.
+
 ## [0.20.0] - 2026-10-14
 
 ### Added
