@@ -311,6 +311,7 @@ flowchart LR
 \`\`\`
 `
 
+export const ISSUE_HINT = 'If the user says prismantis drew something wrong, offer (ask first) a minimal repro issue at https://github.com/NahumLitvin/prismantis/issues.'
 const KOREAN_SHOWCASE = `
 ## 한국어
 
