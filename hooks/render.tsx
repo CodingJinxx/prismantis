@@ -1,4 +1,4 @@
-import type { ElementTable, RenderElement } from 'claude-code'
+import type { ElementTable, RenderElement, RenderNode } from 'claude-code'
 
 import { tableHtml, tableText } from './html'
 import type { Block, Inline } from './markdown'
@@ -347,13 +347,13 @@ const grammarFor = (lang: string) => {
   return grammar !== null && typeof grammar === 'object' ? grammar : undefined
 }
 
-export const highlightBlock = ({ Text }: ElementTable, style: Style, lines: string[], lang: string, key: string): RenderElement[] | null => {
+const segmentRows = (style: Style, lines: string[], lang: string): Segment[][] | null => {
   const grammar = grammarFor(lang)
   if (!grammar) return null
   const code = lines.join('\n')
   const cache = highlighted.get(style.theme) ?? new Map<string, Segment[][]>()
   highlighted.set(style.theme, cache)
-  const rows = remember(cache, `${style.reorder ? style.shape : ''}\0${lang}\0${code}`, () => {
+  return remember(cache, `${style.reorder ? style.shape : ''}\0${lang}\0${code}`, () => {
     const out: Segment[][] = [[]]
     for (const seg of flatten(tokenize(code, grammar), style)) {
       seg.text.split('\n').forEach((piece, i) => {
@@ -363,6 +363,11 @@ export const highlightBlock = ({ Text }: ElementTable, style: Style, lines: stri
     }
     return out
   })
+}
+
+export const highlightBlock = ({ Text }: ElementTable, style: Style, lines: string[], lang: string, key: string): RenderElement[] | null => {
+  const rows = segmentRows(style, lines, lang)
+  if (!rows) return null
   return rows.map((row, r) => (
     <Text key={`${key}.${r}`} color={style.theme.codeText}>
       {row.length ? row.map((s, i) => <Text key={`${key}.${r}.${i}`} color={s.color} italic={s.italic}>{s.text}</Text>) : ' '}
@@ -1034,8 +1039,9 @@ export const renderShellResult = (el: ElementTable, style: Style, output: unknow
 
 const DIFF_LINES = 20
 const DIFF_MAX = 400
+const DIFF_EXTRA = 5000
 
-type DiffLine = { mark: '+' | '-' | ' '; num: number; text: string }
+type DiffLine = { mark: '+' | '-' | ' ' | '\\'; num: number; text: string; hunk: number }
 
 const HEX = /^#[0-9a-f]{6}$/i
 
@@ -1084,61 +1090,330 @@ export const diffTint = (text: string | undefined, color: string | undefined): s
 export const diffLines = (output: unknown): DiffLine[] | undefined => {
   if (output === null || typeof output !== 'object') return undefined
   const out = output as { type?: unknown; content?: unknown; structuredPatch?: unknown }
-  if (out.type === 'create' && typeof out.content === 'string') return lines(out.content).map((text, i) => ({ mark: '+', num: i + 1, text }))
+  if (out.type === 'create' && typeof out.content === 'string') return lines(out.content).map((text, i) => ({ mark: '+', num: i + 1, text, hunk: 0 }))
   if (!Array.isArray(out.structuredPatch) || out.structuredPatch.length === 0) return undefined
   const rows: DiffLine[] = []
-  for (const hunk of out.structuredPatch as { oldStart?: unknown; newStart?: unknown; lines?: unknown }[]) {
+  for (const [h, hunk] of (out.structuredPatch as { oldStart?: unknown; newStart?: unknown; lines?: unknown }[]).entries()) {
     if (typeof hunk?.oldStart !== 'number' || typeof hunk.newStart !== 'number' || !Array.isArray(hunk.lines)) return undefined
-    let [o, n] = [hunk.oldStart, hunk.newStart]
-    for (const l of hunk.lines) {
-      if (typeof l !== 'string' || l.startsWith('\\')) continue
-      const mark = l[0] === '+' || l[0] === '-' ? l[0] : ' '
-      let num: number
-      if (mark === '-') num = o++
-      else {
-        if (mark === ' ') o++
-        num = n++
-      }
-      rows.push({ mark, num, text: l.slice(1) })
-    }
+    rows.push(...hunkRows(hunk.lines, hunk.oldStart, hunk.newStart, h))
   }
   return rows
 }
 
-const diffBox = (el: ElementTable, style: Style, rows: DiffLine[], fold: Fold, id: string, key: string, title?: string): RenderElement => {
+const hunkRows = (lines: unknown[], oldStart: number, newStart: number, hunk: number): DiffLine[] => {
+  const rows: DiffLine[] = []
+  let [o, n] = [oldStart, newStart]
+  for (const l of lines) {
+    if (typeof l !== 'string') continue
+    const mark = (l[0] === '+' || l[0] === '-' || l[0] === '\\' ? l[0] : ' ') as DiffLine['mark']
+    let num = 0
+    if (mark === '-') num = o++
+    else if (mark !== '\\') {
+      if (mark === ' ') o++
+      num = n++
+    }
+    rows.push({ mark, num, text: l.slice(1), hunk })
+  }
+  return rows
+}
+
+const realLines = (rows: DiffLine[]): number => rows.filter(r => r.mark !== '\\').length
+
+const firstLines = (rows: DiffLine[], count: number): DiffLine[] => {
+  let [end, seen] = [0, 0]
+  while (end < rows.length && (rows[end]!.mark === '\\' || seen < count)) if (rows[end++]!.mark !== '\\') seen++
+  return rows.slice(0, end)
+}
+
+const EXTENSIONS: Record<string, string> = {
+  mts: 'typescript', cts: 'typescript', mjs: 'javascript', cjs: 'javascript', pyi: 'python', rs: 'rust',
+  h: 'c', cc: 'cpp', cxx: 'cpp', hpp: 'cpp', hh: 'cpp', hxx: 'cpp', jsonc: 'json', htm: 'html', tf: 'hcl',
+}
+
+export const pathLanguage = (path: string | undefined): string | undefined => {
+  const name = path?.split(/[\\/]/).pop() ?? ''
+  if (/^(Dockerfile|Containerfile)(\.|$)/i.test(name)) return 'dockerfile'
+  const dot = name.lastIndexOf('.')
+  const ext = dot > 0 ? name.slice(dot + 1).toLowerCase() : ''
+  if (Object.hasOwn(EXTENSIONS, ext)) return EXTENSIONS[ext]
+  return ext && grammarFor(ext) ? ext : undefined
+}
+
+const lifted = new Map<string, string>()
+
+export const onTint = (color: string | undefined, bg: string): string | undefined => {
+  if (!color || !HEX.test(color) || !HEX.test(bg) || contrast(color, bg) >= TEXT_CONTRAST) return color
+  return remember(lifted, `${color}${bg}`, () => {
+    const toward = contrast(bg, '#ffffff') >= contrast(bg, '#000000') ? '#ffffff' : '#000000'
+    let share = 0
+    while (share < 1 && contrast(tint(color, toward, share)!, bg) < TEXT_CONTRAST) share = Math.min(1, share + 0.02)
+    return tint(color, toward, share)!
+  })
+}
+
+const fileSegments = (style: Style, path: string | undefined, lines: string[]): Segment[][] => {
+  const lang = pathLanguage(path)
+  return (lang === undefined ? null : segmentRows(style, lines, lang)) ?? lines.map(text => (text ? [{ text, italic: false }] : []))
+}
+
+const diffSegments = (style: Style, rows: DiffLine[], path: string | undefined): Segment[][] => {
+  const out: Segment[][] = rows.map(r => ((r.mark === '-' || r.mark === '\\') && r.text ? [{ text: r.text, italic: false }] : []))
+  let start = 0
+  while (start < rows.length) {
+    let end = start
+    while (end < rows.length && rows[end]!.hunk === rows[start]!.hunk) end++
+    const after = Array.from({ length: end - start }, (_, i) => start + i).filter(r => rows[r]!.mark === ' ' || rows[r]!.mark === '+')
+    const now = fileSegments(style, path, after.map(r => rows[r]!.text))
+    after.forEach((r, i) => (out[r] = now[i]!))
+    start = end
+  }
+  return out
+}
+
+const WORD_SHARE = 0.3
+
+export const wordTint = (text: string | undefined, color: string | undefined): string | undefined => {
+  const row = diffTint(text, color)
+  return row && tint(row, color, WORD_SHARE)
+}
+
+const WORD = /\w+|\s+|[^\w\s]/g
+const WORD_CELLS = 40000
+const WORD_CHANGE = 0.5
+
+const solid = (unit: string): boolean => /\S/.test(unit)
+
+const unitsOf = (segs: Segment[]): string[] => segs.flatMap(s => s.text.match(WORD) ?? [])
+
+const keptUnits = (a: string[], b: string[]): [boolean[], boolean[]] => {
+  const width = b.length + 1
+  const lcs = new Uint16Array((a.length + 1) * width)
+  for (let i = a.length - 1; i >= 0; i--) {
+    for (let j = b.length - 1; j >= 0; j--) lcs[i * width + j] = a[i] === b[j] ? lcs[(i + 1) * width + j + 1]! + 1 : Math.max(lcs[(i + 1) * width + j]!, lcs[i * width + j + 1]!)
+  }
+  const kept: [boolean[], boolean[]] = [a.map(() => false), b.map(() => false)]
+  for (let i = 0, j = 0; i < a.length && j < b.length; ) {
+    if (a[i] === b[j]) kept[0][i++] = kept[1][j++] = true
+    else if (lcs[(i + 1) * width + j]! >= lcs[i * width + j + 1]!) i++
+    else j++
+  }
+  return kept
+}
+
+const changedUnits = (units: string[], kept: boolean[]): boolean[] => {
+  const changed = units.map((u, i) => !kept[i] && solid(u))
+  return units.map((_, i) => changed[i]! || (!kept[i] && changed[i - 1] === true && changed[i + 1] === true))
+}
+
+const weight = (units: string[], flags?: boolean[]): number => units.reduce((n, u, i) => (solid(u) && (!flags || flags[i]) ? n + u.length : n), 0)
+
+const wordDiffs = new Map<string, [boolean[], boolean[]] | null>()
+
+const wordDiff = (a: string[], b: string[]): [boolean[], boolean[]] | null => {
+  if (a.length * b.length > WORD_CELLS) return null
+  return remember(wordDiffs, `${a.join('\u0001')}\n${b.join('\u0001')}`, () => {
+    const kept = keptUnits(a, b)
+    const flags: [boolean[], boolean[]] = [changedUnits(a, kept[0]), changedUnits(b, kept[1])]
+    const changed = weight(a, flags[0]) + weight(b, flags[1])
+    return changed === 0 || changed > (weight(a) + weight(b)) * WORD_CHANGE ? null : flags
+  })
+}
+
+const runOf = (rows: DiffLine[], from: number, mark: '+' | '-', hunk: number): [number[], number] => {
+  const at: number[] = []
+  let end = from
+  for (; end < rows.length && rows[end]!.hunk === hunk && (rows[end]!.mark === mark || rows[end]!.mark === '\\'); end++) if (rows[end]!.mark === mark) at.push(end)
+  return [at, end]
+}
+
+const wordFlags = (rows: DiffLine[], segments: Segment[][]): (boolean[] | null)[] => {
+  const flags: (boolean[] | null)[] = rows.map(() => null)
+  for (let i = 0; i < rows.length; ) {
+    if (rows[i]!.mark !== '-') {
+      i++
+      continue
+    }
+    const [removed, mid] = runOf(rows, i, '-', rows[i]!.hunk)
+    const [added, end] = runOf(rows, mid, '+', rows[i]!.hunk)
+    for (let k = 0; k < Math.min(removed.length, added.length); k++) {
+      const diff = wordDiff(unitsOf(segments[removed[k]!]!), unitsOf(segments[added[k]!]!))
+      if (diff) [flags[removed[k]!], flags[added[k]!]] = diff
+    }
+    i = Math.max(end, i + 1)
+  }
+  return flags
+}
+
+type Piece = Segment & { word: boolean }
+
+const merged = (pieces: Piece[]): Piece[] =>
+  pieces.reduce<Piece[]>((acc, p) => {
+    const last = acc[acc.length - 1]
+    if (last && last.color === p.color && last.italic === p.italic && last.word === p.word) acc[acc.length - 1] = { ...last, text: last.text + p.text }
+    else acc.push(p)
+    return acc
+  }, [])
+
+const wordPieces = (segs: Segment[], flags: boolean[] | null): Piece[] => {
+  let u = 0
+  return merged(segs.flatMap(s => (flags ? (s.text.match(WORD) ?? []).map(text => ({ ...s, text, word: flags[u++]! })) : [{ ...s, word: false }])))
+}
+
+const TAB = 8
+
+const tabbed = (pieces: Piece[]): Piece[] => {
+  if (!pieces.some(p => p.text.includes('\t'))) return pieces
+  let col = 0
+  return pieces.map(p => {
+    let text = ''
+    for (const g of graphemes(p.text)) {
+      const out = g === '\t' ? ' '.repeat(TAB - (col % TAB)) : g
+      text += out
+      col += width(out)
+    }
+    return { ...p, text }
+  })
+}
+
+const cutAt = (blank: boolean, space: number, from: number, at: number): number => (blank || space <= from ? at : space)
+
+const rowStarts = (text: string, room: number): number[] => {
+  const starts = [0]
+  let [used, at, space, seen] = [0, 0, -1, false]
+  for (const g of /^[ -~]*$/.test(text) ? text : graphemes(text)) {
+    const step = width(g)
+    const from = starts[starts.length - 1]!
+    const blank = /\s/.test(g)
+    if (used + step > room && at > from) {
+      const cut = cutAt(blank, space, from, at)
+      starts.push(cut)
+      used = width(text.slice(cut, at))
+      seen = /\S/.test(text.slice(cut, at))
+      space = -1
+    }
+    at += g.length
+    used += step
+    if (!blank) seen = true
+    else if (seen) space = at
+  }
+  return starts
+}
+
+const splitRows = (pieces: Piece[], starts: number[]): Piece[][] => {
+  const rows: Piece[][] = starts.map(() => [])
+  let [at, r] = [0, 0]
+  for (const p of pieces) {
+    for (let from = 0; from < p.text.length; ) {
+      while (r + 1 < starts.length && starts[r + 1]! <= at + from) r++
+      const end = Math.min(p.text.length, (starts[r + 1] ?? Infinity) - at)
+      rows[r]!.push({ ...p, text: p.text.slice(from, end) })
+      from = end
+    }
+    at += p.text.length
+  }
+  return rows
+}
+
+const DIFF_ROOM = 8
+
+const visualRows = (pieces: Piece[], room: number | undefined): Piece[][] => {
+  const text = pieces.map(p => p.text).join('')
+  return room === undefined || room < DIFF_ROOM || width(text) <= room ? [pieces] : splitRows(pieces, rowStarts(text, room))
+}
+
+const drawCode = ({ Text }: ElementTable, style: Style, pieces: Piece[], bg: string | undefined, word: string | undefined, key: string): RenderNode[] | string => {
+  if (!pieces.length) return ' '
+  return pieces.map((p, j) => {
+    const lit = p.word && word !== undefined
+    if (!lit && !p.color && !p.italic) return p.text
+    const on = lit ? word : bg
+    return <Text key={`${key}.${j}`} color={on ? onTint(p.color ?? style.theme.codeText, on) : p.color} italic={p.italic} {...(lit ? { backgroundColor: word } : {})}>{p.text}</Text>
+  })
+}
+
+type Budget = { left: number }
+
+const spend = (budget: Budget, cost: number): boolean => {
+  if (cost > budget.left) return false
+  budget.left -= cost
+  return true
+}
+
+const lineCost = (parts: Piece[][], bar: boolean, note: boolean): number =>
+  parts.reduce((n, part) => n + (bar ? 8 : 6) + Math.max(1, part.reduce((m, p) => m + (p.color || p.italic || p.word ? 2 : 1), 0)), 0) - (note ? 0 : bar ? 9 : 7)
+
+type MarkColors = Record<DiffLine['mark'], string | undefined>
+
+type DiffPaint = { look: Style['diffStyle']; gutter: number; marks: MarkColors; tints: MarkColors; words: MarkColors }
+
+const UNTINTED: MarkColors = { '+': undefined, '-': undefined, ' ': undefined, '\\': undefined }
+
+const diffPaint = (style: Style, gutter: number): DiffPaint => {
+  const t = style.theme
+  const [added, removed] = [t.diffAdded ?? t.number, t.diffRemoved ?? t.codeFlag]
+  const tinted = style.diffStyle === 'card' || style.diffStyle === 'full'
+  const lines = { ...UNTINTED, '+': diffTint(t.codeText, added), '-': diffTint(t.codeText, removed) }
+  return {
+    look: style.diffStyle,
+    gutter,
+    marks: { ...UNTINTED, '+': added, '-': removed, '\\': t.codeText },
+    tints: tinted ? lines : UNTINTED,
+    words: tinted ? { ...UNTINTED, '+': wordTint(t.codeText, added), '-': wordTint(t.codeText, removed) } : lines,
+  }
+}
+
+const codeRoom = (paint: DiffPaint, columns: number | undefined): number | undefined =>
+  columns === undefined ? undefined : columns - 5 - (paint.look === 'card' ? 4 : 0) - (paint.look === 'bar' ? 2 : 0) - paint.gutter - 3
+
+const lineRows = (el: ElementTable, style: Style, paint: DiffPaint, r: DiffLine, i: number, parts: Piece[][]): RenderElement[] => {
+  const { Box, Text } = el
+  const bg = paint.tints[r.mark]
+  const note = r.mark === '\\'
+  const code = style.theme.codeText
+  const bar = r.mark === ' ' || note ? '  ' : '▌ '
+  const mark = note ? '  ' : `${r.mark} `
+  return parts.map((part, k) => (
+    <Box key={k ? `d${i}.${k}` : `d${i}`} flexDirection="row" {...(bg ? { backgroundColor: bg } : {})}>
+      {paint.look === 'bar' ? <Text color={paint.marks[r.mark]}>{bar}</Text> : null}
+      <Text dimColor>{`${k || note ? ' '.repeat(paint.gutter) : String(r.num).padStart(paint.gutter)} `}</Text>
+      <Text color={paint.marks[r.mark]} dimColor={r.mark === ' '}>{mark}</Text>
+      <Text color={bg ? onTint(code, bg) : code}>{drawCode(el, style, part, bg, paint.words[r.mark], `d${i}.${k}`)}</Text>
+    </Box>
+  ))
+}
+
+const budgetedRows = (el: ElementTable, style: Style, paint: DiffPaint, r: DiffLine, i: number, rich: Piece[][], budget: Budget): RenderElement[] => {
+  if (spend(budget, lineCost(rich, paint.look === 'bar', r.mark === '\\'))) return lineRows(el, style, paint, r, i, rich)
+  return r.mark === '\\' ? [] : lineRows(el, style, paint, r, i, [r.text ? [{ text: r.text, italic: false, word: false }] : []])
+}
+
+const hunkGap = ({ Text }: ElementTable, paint: DiffPaint, shown: DiffLine[], i: number, budget: Budget): RenderElement[] =>
+  i > 0 && shown[i]!.hunk !== shown[i - 1]!.hunk && spend(budget, 2) ? [<Text key={`gap${i}`} dimColor>{paint.look === 'bar' ? '  ...' : '...'}</Text>] : []
+
+const diffBox = (el: ElementTable, style: Style, rows: DiffLine[], fold: Fold, id: string, key: string, path: string | undefined, budget: Budget, columns: number | undefined, title?: string): RenderElement => {
   const { Box, Text } = el
   const t = style.theme
   const added = rows.filter(r => r.mark === '+').length
   const removed = rows.filter(r => r.mark === '-').length
-  const toggle = rows.length > DIFF_LINES ? fold?.(id, rows.length - DIFF_LINES, `fold${key}`) : null
-  const shown = rows.slice(0, toggle?.folded === false ? DIFF_MAX : DIFF_LINES)
-  const gutter = String(Math.max(0, ...shown.map(r => r.num))).length
-  const [addColor, removeColor] = [t.diffAdded ?? t.number, t.diffRemoved ?? t.codeFlag]
-  const color = (mark: DiffLine['mark']) => (mark === '+' ? addColor : mark === '-' ? removeColor : undefined)
-  const look = style.diffStyle
-  const tinted = look === 'card' || look === 'full'
-  const tints = { '+': tinted ? diffTint(t.codeText, addColor) : undefined, '-': tinted ? diffTint(t.codeText, removeColor) : undefined, ' ': undefined }
-  const frame = look === 'card' ? { borderStyle: 'round', borderColor: t.rule, paddingX: 1 } : {}
+  const total = realLines(rows)
+  const toggle = total > DIFF_LINES ? fold?.(id, total - DIFF_LINES, `fold${key}`) : null
+  const shown = firstLines(rows, toggle?.folded === false ? DIFF_MAX : DIFF_LINES)
+  const hidden = total - realLines(shown)
+  const paint = diffPaint(style, String(Math.max(0, ...shown.map(r => r.num))).length)
+  const frame = paint.look === 'card' ? { borderStyle: 'round', borderColor: t.rule, paddingX: 1 } : {}
+  const segments = diffSegments(style, shown, path)
+  const flags = wordFlags(shown, segments)
+  const room = codeRoom(paint, columns)
   return (
     <Box key={`card${key}`} flexDirection="column" flexShrink={1} {...frame}>
       <Text>
         {title === undefined ? null : <Text color={t.path}>{`${title} `}</Text>}
-        <Text color={addColor} dimColor={added === 0}>{`+${added}`}</Text>
+        <Text color={paint.marks['+']} dimColor={added === 0}>{`+${added}`}</Text>
         <Text> </Text>
-        <Text color={removeColor} dimColor={removed === 0}>{`−${removed}`}</Text>
+        <Text color={paint.marks['-']} dimColor={removed === 0}>{`−${removed}`}</Text>
       </Text>
-      {shown.map((r, i) => {
-        const bg = tints[r.mark]
-        return (
-          <Box key={`d${i}`} flexDirection="row" {...(bg ? { backgroundColor: bg } : {})}>
-            {look === 'bar' ? <Text color={color(r.mark)}>{r.mark === ' ' ? '  ' : '▌ '}</Text> : null}
-            <Text dimColor>{`${String(r.num).padStart(gutter)} `}</Text>
-            <Text color={color(r.mark)} dimColor={r.mark === ' '}>{`${r.mark} `}</Text>
-            <Text color={bg || look === 'bar' ? t.codeText : color(r.mark)} dimColor={r.mark === ' '}>{r.text === '' ? ' ' : r.text}</Text>
-          </Box>
-        )
-      })}
-      {rows.length > shown.length && toggle?.folded !== true ? <Text dimColor>{`… +${rows.length - shown.length} lines`}</Text> : null}
+      {shown.flatMap((r, i) => [...hunkGap(el, paint, shown, i, budget), ...budgetedRows(el, style, paint, r, i, visualRows(tabbed(wordPieces(segments[i]!, flags[i] ?? null)), room), budget)])}
+      {hidden > 0 && toggle?.folded !== true ? <Text dimColor>{`… +${hidden} lines`}</Text> : null}
       {toggle?.element ?? null}
     </Box>
   )
@@ -1151,9 +1426,11 @@ const diffRow = (el: ElementTable, style: Style, cards: RenderElement[], below: 
   </el.Box>
 )
 
-export const renderDiffCard = (el: ElementTable, style: Style, output: unknown, fold: Fold, id: string): RenderElement | undefined => {
+export const renderDiffCard = (el: ElementTable, style: Style, output: unknown, fold: Fold, id: string, columns?: number): RenderElement | undefined => {
   const rows = diffLines(output)
-  return rows === undefined ? undefined : diffRow(el, style, [diffBox(el, style, rows, fold, id, '')], false)
+  if (rows === undefined) return undefined
+  const path = (output as { filePath?: unknown }).filePath
+  return diffRow(el, style, [diffBox(el, style, rows, fold, id, '', typeof path === 'string' ? path : undefined, { left: DIFF_EXTRA }, columns)], false)
 }
 
 type EditedFile = { path: string; rows: DiffLine[] }
@@ -1192,8 +1469,9 @@ export const hasShellOutput = (output: unknown): boolean => {
   return lines(out.stdout).length + lines(out.stderr).length > 0
 }
 
-export const renderBashEdits = (el: ElementTable, style: Style, edits: BashEdits, fold: Fold, id: string, below = false, notes: readonly string[] = []): RenderElement => {
-  const cards = edits.files.map((file, i) => diffBox(el, style, file.rows, fold, `${id}:${i}`, String(i), shortPath(style, file.path)))
+export const renderBashEdits = (el: ElementTable, style: Style, edits: BashEdits, fold: Fold, id: string, below = false, notes: readonly string[] = [], columns?: number): RenderElement => {
+  const budget = { left: DIFF_EXTRA }
+  const cards = edits.files.map((file, i) => diffBox(el, style, file.rows, fold, `${id}:${i}`, String(i), file.path, budget, columns, shortPath(style, file.path)))
   const more = edits.more ? [<el.Text key="more" dimColor>{`… +${edits.more} more ${edits.more === 1 ? 'file' : 'files'}`}</el.Text>] : []
   const said = notes.map((note, i) => <el.Text key={`note${i}`} dimColor>{`(${note})`}</el.Text>)
   return diffRow(el, style, [...cards, ...more, ...said], below)
