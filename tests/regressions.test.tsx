@@ -378,6 +378,7 @@ test('the help screen shows every element prismantis draws', async () => {
   expect(showcaseText([])).toContain('copyButtonStyle')
   expect(showcaseText([])).toContain('+M more lines')
   expect(showcaseText([])).toContain('```figure')
+  expect(showcaseText([])).toContain('lined up with its corner')
   expect(showcaseText([])).toContain('pie showData')
   expect(showcaseText([])).toContain('Release  :milestone')
   expect(blocks.some(b => b.kind === 'code' && b.lines.length > 30)).toBe(true)
