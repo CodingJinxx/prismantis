@@ -5,7 +5,7 @@ import type { Block, Inline } from './markdown'
 import { mathOf } from './latex'
 import { CONTROL, displayText, inlineText, isWebLink, texText } from './markdown'
 import type { Flow } from './rtl'
-import { LTR_BLANK, ROW_MARK, ROW_MARK_TEXT, WALL, commentTail, commentVisual, containsRtl, flow, hasRtl, listMarker, terminalLine } from './rtl'
+import { LTR_BLANK, ROW_MARK, ROW_MARK_TEXT, WALL, codeVisual, commentTail, commentVisual, containsRtl, flow, hasRtl, listMarker, terminalLine } from './rtl'
 import type { Style, Theme } from './theme'
 import type { PrismToken } from './vendor/prism.js'
 import { languages, tokenize } from './vendor/prism.js'
@@ -473,6 +473,8 @@ export const PRISM_COLORS: Record<string, keyof Theme> = {
 
 type Segment = { text: string; color?: string; italic: boolean }
 
+const shownCode = (text: string, style: Style, room?: number): string => (style.reorder ? codeVisual(text, style.shape, room, width) : text)
+
 const flatten = (tokens: PrismToken[], style: Style, color?: string, italic = false): Segment[] =>
   tokens.flatMap(token => {
     if (typeof token === 'string') return [{ text: token, color, italic }]
@@ -503,26 +505,28 @@ const grammarFor = (lang: string) => {
   return grammar !== null && typeof grammar === 'object' ? grammar : undefined
 }
 
-const segmentRows = (style: Style, lines: string[], lang: string): Segment[][] | null => {
+const shownSegment = (seg: Segment, piece: string, style: Style, room?: number): Segment => ({ ...seg, text: seg.italic ? piece : shownCode(piece, style, room) })
+
+const segmentRows = (style: Style, lines: string[], lang: string, room?: number): Segment[][] | null => {
   const grammar = grammarFor(lang)
   if (!grammar) return null
   const code = lines.join('\n')
   const cache = highlighted.get(style.theme) ?? new Map<string, Segment[][]>()
   highlighted.set(style.theme, cache)
-  return remember(cache, `${style.reorder ? style.shape : ''}\0${lang}\0${code}`, () => {
+  return remember(cache, `${style.reorder ? style.shape : ''}\0${room ?? ''}\0${lang}\0${code}`, () => {
     const out: Segment[][] = [[]]
     for (const seg of flatten(tokenize(code, grammar), style)) {
       seg.text.split('\n').forEach((piece, i) => {
         if (i > 0) out.push([])
-        if (piece) out[out.length - 1]!.push({ ...seg, text: piece })
+        if (piece) out[out.length - 1]!.push(shownSegment(seg, piece, style, room))
       })
     }
     return out
   })
 }
 
-export const highlightBlock = ({ Text }: ElementTable, style: Style, lines: string[], lang: string, key: string): RenderElement[] | null => {
-  const rows = segmentRows(style, lines, lang)
+export const highlightBlock = ({ Text }: ElementTable, style: Style, lines: string[], lang: string, key: string, room?: number): RenderElement[] | null => {
+  const rows = segmentRows(style, lines, lang, room)
   if (!rows) return null
   return rows.map((row, r) => (
     <Text key={`${key}.${r}`} color={style.theme.codeText}>
@@ -531,9 +535,11 @@ export const highlightBlock = ({ Text }: ElementTable, style: Style, lines: stri
   ))
 }
 
+const gutterOf = (lines: string[], numbered: boolean) => (numbered ? String(lines.length).length + 2 : 0)
+
 const isShellLang = (lang: string) => lang === '' || /^(sh|bash|zsh|shell|console|fish|powershell|ps1)$/i.test(lang)
 
-export const codeLine = (el: ElementTable, style: Style, line: string, lang: string, key: string): RenderElement => {
+export const codeLine = (el: ElementTable, style: Style, line: string, lang: string, key: string, room?: number): RenderElement => {
   const { Text } = el
   const t = style.theme
   const isShell = isShellLang(lang)
@@ -547,9 +553,9 @@ export const codeLine = (el: ElementTable, style: Style, line: string, lang: str
       </Text>
     )
   }
-  if (!isShell) return <Text key={key} color={t.codeText}>{line || ' '}</Text>
+  if (!isShell) return <Text key={key} color={t.codeText}>{shownCode(line, style, room) || ' '}</Text>
   if (/^\s*#/.test(line)) return <Text key={key} color={t.codeComment}>{line}</Text>
-  const parts = line.split(/("[^"]*"|'[^']*'|\s+)/).filter(p => p !== '')
+  const parts = shownCode(line, style, room).split(/("[^"]*"|'[^']*'|\s+)/).filter(p => p !== '')
   let seenCommand = false
   return (
     <Text key={key} color={t.codeText}>
@@ -1104,7 +1110,8 @@ export const renderBlocks = (el: ElementTable, style: Style, blocks: Block[], co
         const toggle = lines.length > FOLD_AT ? fold?.(codeId(lines), lines.length - FOLD_SHOW, `fold${b}`) : null
         const shown = toggle?.folded ? FOLD_SHOW : lines.length
         const numbered = lines.length >= NUMBER_AT && lines.length <= NUMBER_MAX
-        const drawnRows = (isShellLang(block.lang) ? null : highlightBlock(el, style, lines, block.lang, key))?.slice(0, shown) ?? lines.slice(0, shown).map((line, i) => codeLine(el, style, line, block.lang, `${key}.${i}`))
+        const room = columns - 2 - gutterOf(lines, numbered)
+        const drawnRows = (isShellLang(block.lang) ? null : highlightBlock(el, style, lines, block.lang, key, room))?.slice(0, shown) ?? lines.slice(0, shown).map((line, i) => codeLine(el, style, line, block.lang, `${key}.${i}`, room))
         const rows = style.nativeCode ? [<el.Code key="code" source={lines.slice(0, shown).join('\n') || ' '} {...(block.lang ? { language: block.lang } : {})} {...(numbered ? { startLine: 1 } : {})} />]
           : style.shape === 'engine' ? drawnRows.map((row, i) => <Text key={`${key}.ltr${i}`} {...heldLtr(style)}>{row}</Text>) : drawnRows
         const gutter = String(lines.length).length
