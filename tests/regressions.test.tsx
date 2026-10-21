@@ -385,6 +385,7 @@ test('the help screen shows every element prismantis draws', async () => {
   expect(showcaseText([]).includes("toolStyle")).toBe(true)
   expect(showcaseText([]).includes("toolOutput")).toBe(true)
   expect(showcaseText([])).toContain('copyButtonStyle')
+  expect(showcaseText([])).toContain('each block shows a dim ⧉ instead: point at it for its buttons')
   expect(showcaseText([])).toContain('+M more lines')
   expect(showcaseText([])).toContain('```figure')
   expect(showcaseText([])).toContain('lined up with its corner')
@@ -1875,7 +1876,7 @@ for (const copyButtonStyle of ['inline', 'hover'] as const) test(`a quote that o
   const boxes = await ui.findAll({ type: 'Box' })
   const low = boxes.filter(b => (copyButtonStyle === 'hover' ? b.props.display === 'none' && b.props.bottom === 0 && b.props.right === 0 && b.text !== '⧉ copy reply' : b.props.alignSelf === 'flex-end' && b.key !== 'reply'))
   expect(low.map(b => b.text)).toEqual(['⧉ copy'])
-  expect(boxes.filter(b => b.props.position === 'absolute' && b.props.top === 0 && b.props.display === 'none').map(b => b.text)).toEqual(copyButtonStyle === 'hover' ? ['⧉ copy', '⧉ copy'] : [])
+  expect(boxes.filter(b => b.props.position === 'absolute' && b.props.top === 0 && b.props.display === 'none' && b.text !== '⧉ copy reply').map(b => b.text)).toEqual(copyButtonStyle === 'hover' ? ['⧉ copy', '⧉ copy'] : [])
   await ui.unmount()
 })
 
@@ -1938,6 +1939,23 @@ test('copyButtonStyle hover anchors the buttons of a right-to-left block at its 
   expect(await anchors('| שם | ערך |\n|---|---|\n| אחד | שתיים |')).toEqual(['left'])
   expect(await anchors('- hello שלום\n- world')).toEqual(['right'])
   expect(await anchors('- hello\n- world')).toEqual(['right'])
+})
+
+test('copyButtonStyle hover puts the ⧉ of a right-to-left block at its left, where its lines end', { options: { copyButtonStyle: 'hover', rtl: 'warp' } }, async $ => {
+  const side = async (text: string) => {
+    const ui = await $.ui.mount(mount(text))
+    const row = (await ui.find({ key: 'c0' }))!.children[0] as FloatNode
+    const flow = floatKids(row).filter(child => child.props?.position !== 'absolute')
+    const marked = (child?: FloatNode) => !!(child as { hover?: { scope?: string } } | undefined)?.hover?.scope
+    await ui.unmount()
+    return marked(flow[0]) ? 'left' : marked(flow.at(-1)) ? 'right' : 'none'
+  }
+  expect(await side('- שלום עולם\n- עוד פריט')).toBe('left')
+  expect(await side('> שלום עולם')).toBe('left')
+  expect(await side('> [!NOTE]\n> שלום עולם')).toBe('left')
+  expect(await side('| שם | ערך |\n|---|---|\n| אחד | שתיים |')).toBe('left')
+  expect(await side('- hello שלום\n- world')).toBe('right')
+  expect(await side('- hello\n- world')).toBe('right')
 })
 
 for (const surface of ['terminal', 'desktop'] as const) test(`display math inside a quote or a list item draws as text on ${surface}`, async $ => {
