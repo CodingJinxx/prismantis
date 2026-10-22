@@ -164,10 +164,16 @@ export const imageLines = (text: string): { at: number; text: string }[][] => te
   return runs
 })
 
+const luma = ([r, g, b]: number[]): number => (0.299 * r! + 0.587 * g! + 0.114 * b!) / 255
+
+const readable = (foreground: number[], background: number[]): number[] =>
+  Math.abs(luma(foreground) - luma(background)) >= 0.4 ? foreground : luma(background) > 0.5 ? [0, 0, 0] : [255, 255, 255]
+
 export const imageCommand = (backend: ClipboardBackend, text: string, colors: { foreground?: string; background?: string }, systemRoot?: string): HelperCommand | null => {
   if (!drawsImages(backend)) return null
   const lines = imageLines(text)
-  const json = JSON.stringify({ lines, columns: Math.max(0, ...text.split('\n').map(width)), foreground: rgbOf(colors.foreground, [0, 0, 0]), background: rgbOf(colors.background, [255, 255, 255]) })
+  const background = rgbOf(colors.background, [255, 255, 255])
+  const json = JSON.stringify({ lines, columns: Math.max(0, ...text.split('\n').map(width)), foreground: readable(rgbOf(colors.foreground, [0, 0, 0]), background), background })
   return backend === 'windows'
     ? { stdin: ascii(json), argv: powershell(systemRoot, WIN_IMAGE_COPY), failure: 'Windows image helper failed' }
     : { stdin: json, argv: ['/usr/bin/osascript', '-l', 'JavaScript', '-e', MAC_IMAGE_COPY], failure: 'macOS image helper failed' }

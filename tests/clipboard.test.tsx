@@ -215,8 +215,10 @@ test('the image helper gets each line as runs placed by terminal column, and the
   const win = imageCommand('windows', text, { foreground: 'ansi256(15)', background: '#fff' }, 'C:\\Windows')!
   expect(win.argv).toEqual(['C:\\Windows\\System32\\WindowsPowerShell\\v1.0\\powershell.exe', '-NoProfile', '-NonInteractive', '-STA', '-Command', WIN_IMAGE_COPY])
   expect(win.stdin).toMatch(/^[\x00-\x7e]*$/)
-  expect(JSON.parse(win.stdin)).toEqual({ ...JSON.parse(mac.stdin), foreground: [255, 255, 255], background: [255, 255, 255] })
+  expect(JSON.parse(win.stdin)).toEqual({ ...JSON.parse(mac.stdin), foreground: [0, 0, 0], background: [255, 255, 255] })
   expect(JSON.parse(imageCommand('macos', 'x', { foreground: 'cyan' })!.stdin)).toMatchObject({ foreground: [0, 0, 0], background: [255, 255, 255] })
+  expect(JSON.parse(imageCommand('macos', 'x', { foreground: '#c9d4f2' })!.stdin)).toMatchObject({ foreground: [0, 0, 0], background: [255, 255, 255] })
+  expect(JSON.parse(imageCommand('macos', 'x', { foreground: '#202020', background: '#1e1e2e' })!.stdin)).toMatchObject({ foreground: [255, 255, 255] })
   expect(imageCommand('linux', text, {})).toBeNull()
 })
 
