@@ -560,7 +560,7 @@ export const register: Register = (on, options) => {
   const picked: Picked = { theme: firstTheme, options, latex }
   const probes: Probes = {}
   const forSurface = (base: Style, surface: RenderSurface, links: LinkReach): Style => {
-    const drawn = surface === 'terminal' ? (links.http || links.editor ? { ...base, httpLinks: links.http, editorLinks: links.editor, fileLinks: links.files, pathLinks: links.paths } : base) : { ...base, htmlCopy: null, nativeCode: true }
+    const drawn = surface === 'terminal' ? (links.http || links.editor ? { ...base, httpLinks: links.http, editorLinks: links.editor, fileLinks: links.files, pathLinks: links.paths } : base) : { ...base, htmlCopy: null, nativeCode: true, gridFace: surface === 'desktop' }
     return surface === 'mobile' && drawn.copyButtonStyle === 'hover' ? { ...drawn, copyButtonStyle: 'inline' } : drawn
   }
   const fullWidth = (text: string) => (style.reorder && hasRtl(text) ? { width: '100%' as const } : {})

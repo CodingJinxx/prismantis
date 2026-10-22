@@ -346,6 +346,8 @@ export const mirrored = (style: Style) => style.shape === 'mirror'
 
 export const heldLtr = (style: Style) => (style.shape === 'engine' ? { dir: 'ltr' as const } : {})
 
+export const gridFace = (style: Style) => (style.gridFace ? { mono: true as const } : {})
+
 const flows = new Map<string, Flow | null>()
 const flowOf = (style: Style, nodes: Inline[], columns: number, mark = !(style.inside && mirrored(style))) =>
   style.reorder && containsRtl(nodes) ? remember(flows, `${style.shape}\0${mark}\0${columns}\0${JSON.stringify(nodes)}`, () => flow(nodes, columns, width, style.shape, mark), 2000) : null
@@ -778,6 +780,8 @@ const mirroredBanner = (el: ElementTable, style: Style, level: number, inline: I
   return <Box key={key} flexDirection="column">{edge(`${key}.t`)}{text}{edge(`${key}.b`)}</Box>
 }
 
+const HEADING_RULE = 200
+
 const drawHeading = (el: ElementTable, style: Style, block: Extract<Block, { kind: 'heading' }>, inline: Inline[], key: string) => {
   const { Box, Text } = el
   const t = style.theme
@@ -791,7 +795,7 @@ const drawHeading = (el: ElementTable, style: Style, block: Extract<Block, { kin
     case 'banner':
       if (block.level === 1) return <Box key={key} alignSelf="flex-start" borderStyle="bold" borderColor={color} paddingX={1}><Text bold color={color}>{renderInline(el, style, inline, key)}</Text></Box>
       return block.level === 2
-        ? <Box key={key} flexDirection="column" alignSelf="flex-start"><Text bold color={color}>{renderInline(el, style, inline, key)}</Text><Text color={color}>{'━'.repeat(width(label))}</Text></Box>
+        ? <Box key={key} flexDirection="column" alignSelf="flex-start"><Text bold color={color}>{renderInline(el, style, inline, key)}</Text>{style.gridFace ? <Box flexDirection="row"><Box width={0} flexGrow={1} height={1} overflow="hidden"><Text color={color} {...gridFace(style)}>{'━'.repeat(HEADING_RULE)}</Text></Box></Box> : <Text color={color}>{'━'.repeat(width(label))}</Text>}</Box>
         : <Text key={key} bold color={block.level === 3 ? color : t.strong}>{renderInline(el, style, inline, key)}</Text>
     default:
       return <Text key={key} bold color={color}>{renderInline(el, style, inline, key)}</Text>
