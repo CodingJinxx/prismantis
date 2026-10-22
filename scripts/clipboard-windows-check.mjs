@@ -7,7 +7,7 @@ if (process.platform !== 'win32') {
   process.exit(0)
 }
 
-const { parse, tableHtml, clipboardCommand } = await load()
+const { parse, tableHtml, clipboardCommand, imageCommand } = await load()
 const table = parse('| Name | Value |\n|--|--|\n| Żółć & שלום | ✅ 中文 |', { numbers: false, paths: false }).find(block => block.kind === 'table')
 assert.ok(table)
 const html = tableHtml(table)
@@ -66,3 +66,21 @@ assert.ok(cf.length === endHtml || (cf.length === endHtml + 1 && cf[endHtml] ===
 for (const cell of ['Żółć', 'שלום', '✅', '中文']) assert.ok(cf.toString('utf8', startFragment, endFragment).includes(cell), `${cell} missing from clipboard`)
 assert.equal(unicode.toString('utf8'), text.replace(/\n/g, '\r\n'))
 console.log('Windows clipboard holds CF_HTML with byte offsets and CRLF Unicode text')
+
+const image = imageCommand('windows', '┌──────┐\n│ 苹果 │\n└──────┘', { foreground: '#cdd6f4', background: '#1e1e2e' }, process.env.SystemRoot)
+const drawn = spawnSync(image.argv[0], image.argv.slice(1), { input: image.stdin, encoding: 'utf8', timeout: 30000 })
+assert.equal(drawn.status, 0, drawn.stderr || drawn.error?.message)
+const look = `
+$ErrorActionPreference = 'Stop'
+Add-Type -AssemblyName System.Windows.Forms
+$picture = [System.Windows.Forms.Clipboard]::GetImage()
+if (-not $picture) { throw 'No image on clipboard' }
+$corner = $picture.GetPixel(0, 0)
+[Console]::Out.WriteLine(($picture.Width, $picture.Height, $corner.R, $corner.G, $corner.B) -join ',')
+`
+const seen = spawnSync(image.argv[0], ['-NoProfile', '-NonInteractive', '-STA', '-Command', look], { encoding: 'utf8', timeout: 30000 })
+assert.equal(seen.status, 0, seen.stderr || seen.error?.message)
+const [wide, high, ...corner] = seen.stdout.trim().split(',').map(Number)
+assert.ok(wide > 8 * 7 && high > 3 * 14, `image is ${wide}x${high}`)
+assert.deepEqual(corner, [30, 30, 46])
+console.log(`Windows image helper writes a ${wide}x${high} bitmap in the theme background`)

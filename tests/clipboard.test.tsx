@@ -1,6 +1,6 @@
 import { expect, mock, test } from 'claude-code/testing'
 
-import { LINUX_TABLE_COPY, MAC_TABLE_COPY, WIN_TABLE_COPY } from '../hooks/clipboard'
+import { LINUX_TABLE_COPY, MAC_IMAGE_COPY, MAC_TABLE_COPY, WIN_IMAGE_COPY, WIN_TABLE_COPY, imageCommand } from '../hooks/clipboard'
 import { clipboardEnv, recordCopies, recordToasts, runResult, startSession } from './clipboard-env'
 
 const source = '| Name | Value |\n|--|--:|\n| **שלום** | `$(ignored)` |'
@@ -30,7 +30,7 @@ for (const [backend, setup] of Object.entries(backends)) test(`${backend} copies
   const toasts = recordToasts(on)
   await startSession($, on)
   const ui = await $.ui.mount(mount)
-  expect((await ui.findAll({ type: 'Button' })).map(button => button.props.label).filter(label => label !== '⧉ copy reply')).toEqual(['⧉ md', '⧉ art', '⧉ html'])
+  expect((await ui.findAll({ type: 'Button' })).map(button => button.props.label).filter(label => label !== '⧉ copy reply')).toEqual(['⧉ md', '⧉ art', '⧉ html', ...(backend === 'macos' ? ['▣ png'] : [])])
   expect(calls).toHaveLength(0)
   await ui.press({ key: 'html0' })
   expect(calls).toHaveLength(1)
@@ -55,7 +55,7 @@ test('windows copies HTML and CRLF plain text through PowerShell', async ($, on)
   const toasts = recordToasts(on)
   await startSession($, on)
   const ui = await $.ui.mount({ ...mount, props: { text: '| Name | Value |\n|--|--|\n| ✅ done | ❌ failed |', isFirstOfReply: true } })
-  expect((await ui.findAll({ type: 'Button' })).map(button => button.props.label).filter(label => label !== '⧉ copy reply')).toEqual(['⧉ md', '⧉ art', '⧉ html'])
+  expect((await ui.findAll({ type: 'Button' })).map(button => button.props.label).filter(label => label !== '⧉ copy reply')).toEqual(['⧉ md', '⧉ art', '⧉ html', '▣ png'])
   expect(calls).toHaveLength(0)
   await ui.press({ key: 'html0' })
   expect(calls).toHaveLength(1)
@@ -163,7 +163,7 @@ test('the HTML check runs once, on session start or on the first prompt after a 
   await $.prompt.submit({ text: 'again', wait: false, origin: { kind: 'composer' } })
   await $.session.start({ cwd: '/tmp', surface: 'terminal', isInteractive: true })
   const after = await $.ui.mount(mount)
-  expect((await after.findAll({ type: 'Button' })).map(button => button.props.label).filter(label => label !== '⧉ copy reply')).toEqual(['⧉ md', '⧉ art', '⧉ html'])
+  expect((await after.findAll({ type: 'Button' })).map(button => button.props.label).filter(label => label !== '⧉ copy reply')).toEqual(['⧉ md', '⧉ art', '⧉ html', '▣ png'])
   expect(checks).toBe(1)
   await after.unmount()
 })
@@ -184,7 +184,7 @@ test('a table drawn before the HTML check lands gains ⧉ html when it lands', a
   expect(await labels()).toEqual(['⧉ md', '⧉ art'])
   release()
   await started
-  expect(await labels()).toEqual(['⧉ md', '⧉ art', '⧉ html'])
+  expect(await labels()).toEqual(['⧉ md', '⧉ art', '⧉ html', '▣ png'])
   await ui.unmount()
 })
 
@@ -199,5 +199,80 @@ for (const key of ['copy0', 'html0']) for (const failure of ['unavailable', 'ref
   const ui = await $.ui.mount(mount)
   await ui.press({ key })
   expect(toasts).toEqual([failure === 'refused' ? 'Copy failed' : 'Copy failed: no-clipboard'])
+  await ui.unmount()
+})
+
+test('the image helper gets each line as runs placed by terminal column, and the theme colors as RGB, on stdin', async () => {
+  const text = '┌────┐\n│ 苹果 │\n└────┘'
+  const mac = imageCommand('macos', text, { foreground: '#cdd6f4', background: '#1e1e2e' })!
+  expect(mac.argv).toEqual(['/usr/bin/osascript', '-l', 'JavaScript', '-e', MAC_IMAGE_COPY])
+  expect(JSON.parse(mac.stdin)).toEqual({
+    lines: [[{ at: 0, text: '┌────┐' }], [{ at: 0, text: '│ ' }, { at: 2, text: '苹' }, { at: 4, text: '果' }, { at: 6, text: ' │' }], [{ at: 0, text: '└────┘' }]],
+    columns: 8,
+    foreground: [205, 214, 244],
+    background: [30, 30, 46],
+  })
+  const win = imageCommand('windows', text, { foreground: 'ansi256(15)', background: '#fff' }, 'C:\\Windows')!
+  expect(win.argv).toEqual(['C:\\Windows\\System32\\WindowsPowerShell\\v1.0\\powershell.exe', '-NoProfile', '-NonInteractive', '-STA', '-Command', WIN_IMAGE_COPY])
+  expect(win.stdin).toMatch(/^[\x00-\x7e]*$/)
+  expect(JSON.parse(win.stdin)).toEqual({ ...JSON.parse(mac.stdin), foreground: [255, 255, 255], background: [255, 255, 255] })
+  expect(JSON.parse(imageCommand('macos', 'x', { foreground: 'cyan' })!.stdin)).toMatchObject({ foreground: [0, 0, 0], background: [255, 255, 255] })
+  expect(imageCommand('linux', text, {})).toBeNull()
+})
+
+const figures = '| Item | Qty |\n|--|--:|\n| 苹果 | 3 |\n\n```mermaid\ngraph LR\nA[User] --> B[Gateway]\n```'
+const pngSetups = {
+  macos: { platform: 'macos', env: {}, script: MAC_IMAGE_COPY },
+  windows: { platform: 'other', env: { OS: 'Windows_NT', SystemRoot: 'C:\\Windows' }, script: WIN_IMAGE_COPY },
+  linux: { platform: 'other', env: { DISPLAY: ':0' }, script: undefined },
+} as const
+
+for (const surface of ['terminal', 'desktop'] as const) for (const [backend, setup] of Object.entries(pngSetups)) test(`▣ png on tables and diagrams ${setup.script && surface === 'terminal' ? 'copies an image' : 'is hidden'} on ${backend} ${surface}`, async ($, on) => {
+  clipboardEnv(on, setup.platform, setup.env)
+  const calls: { argv: readonly string[]; input: string }[] = []
+  on('process.run', (_, e) => {
+    calls.push({ argv: e.argv, input: e.init?.stdin ?? '' })
+    return runResult(0)
+  })
+  const copies = recordCopies(on)
+  const toasts = recordToasts(on)
+  await startSession($, on)
+  const ui = await $.ui.mount({ ...mount, surface, props: { text: figures, isFirstOfReply: true } })
+  const pngs = (await ui.findAll({ type: 'Button' })).filter(button => button.props.label === '▣ png').map(button => button.key)
+  if (!setup.script || surface !== 'terminal') {
+    expect(pngs).toEqual([])
+    await ui.unmount()
+    return
+  }
+  expect(pngs).toEqual(['png0', 'png1'])
+  await ui.press({ key: 'art0' })
+  await ui.press({ key: 'png0' })
+  expect(calls).toHaveLength(1)
+  expect(calls[0]!.argv.at(-1)).toBe(setup.script)
+  expect(JSON.parse(calls[0]!.input).lines.map((runs: { text: string }[]) => runs.map(run => run.text).join('')).join('\n')).toBe(copies[0])
+  await ui.press({ key: 'png1' })
+  expect(JSON.parse(calls[1]!.input).lines.flat().map((run: { text: string }) => run.text).join('')).toContain('Gateway')
+  expect(toasts).toEqual(['Copied', 'Copied as image', 'Copied as image'])
+  await ui.unmount()
+})
+
+test('a failed image copy falls back to the drawn text and says why', async ($, on) => {
+  clipboardEnv(on, 'macos')
+  on('process.run', () => runResult(1, 'Cannot draw image'))
+  const copies = recordCopies(on)
+  const toasts = recordToasts(on)
+  await startSession($, on)
+  const ui = await $.ui.mount({ ...mount, props: { text: figures, isFirstOfReply: true } })
+  await ui.press({ key: 'png0' })
+  expect(copies[0]).toContain('│ 苹果 │')
+  expect(toasts).toEqual(['Copied as plain text (Cannot draw image)'])
+  await ui.unmount()
+})
+
+test('copyButtons off draws no ▣ png', { options: { copyButtons: false } }, async ($, on) => {
+  clipboardEnv(on, 'macos')
+  await startSession($, on)
+  const ui = await $.ui.mount({ ...mount, props: { text: figures, isFirstOfReply: true } })
+  expect(await ui.findAll({ type: 'Button' })).toHaveLength(0)
   await ui.unmount()
 })

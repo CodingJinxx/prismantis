@@ -818,7 +818,7 @@ const leadInline = (blocks: Block[]): Inline[] => {
 }
 
 const renderNested = (el: ElementTable, style: Style, blocks: Block[], columns: number, key: string, copy?: CopyButton, fold?: Fold, tip?: Tip) =>
-  renderBlocks(el, style, blocks, columns, drawMath(el, style, blocks), copy && ((text, id, label, html) => copy(text, `${key}.${id}`, label, html)), fold && ((id, hidden, k) => fold(id, hidden, `${key}.${k}`)), tip)
+  renderBlocks(el, style, blocks, columns, drawMath(el, style, blocks), copy && ((text, id, label, html, png) => copy(text, `${key}.${id}`, label, html, png)), fold && ((id, hidden, k) => fold(id, hidden, `${key}.${k}`)), tip)
 
 const quoteBar = (el: ElementTable, text: string, color: string | undefined, lines: number) =>
   lines <= 1 ? <el.Text color={color}>{text}</el.Text> : clip(el, width(text), <el.Text color={color}>{Array.from({ length: lines }, () => text).join('\n')}</el.Text>)
@@ -968,7 +968,7 @@ const renderList = (el: ElementTable, style: Style, block: Extract<Block, { kind
   )
 }
 
-export type CopyButton = (text: string | (() => string), key: string, label?: string, html?: () => string) => RenderElement | null
+export type CopyButton = (text: string | (() => string), key: string, label?: string, html?: () => string, png?: boolean) => RenderElement | null
 export type Drawn = Map<number, { element?: RenderElement; art?: string; note?: string }>
 export type FoldLook = { label?: string; face?: (folded: boolean) => RenderElement }
 export type Fold = (id: string, hidden: number, key: string, look?: FoldLook) => { folded: boolean; element: RenderElement; faced: boolean; around?: (rows: RenderElement, hover: TextHoverProps) => RenderElement } | null
@@ -1080,7 +1080,7 @@ export const renderBlocks = (el: ElementTable, style: Style, blocks: Block[], co
     const first = text === undefined || isPlainCode ? null : copy?.(text, `copy${b}`, block.kind === 'table' ? '⧉ md' : art === undefined ? undefined : '⧉ source')
     const second = first && art !== undefined ? copy?.(art, `art${b}`, '⧉ art') : null
     const html = first && block.kind === 'table' ? copy?.(() => tableText(block), `html${b}`, '⧉ html', () => tableHtml(block)) : null
-    return { first, second, html }
+    return { first, second, html, png: second && copy?.(art!, `png${b}`, '▣ png', undefined, true) }
   })
   const codeHead = (label: string, button: RenderElement | null) => {
     if (!hover || !button) return null
@@ -1148,7 +1148,7 @@ export const renderBlocks = (el: ElementTable, style: Style, blocks: Block[], co
   })
   const copied = rendered.map((element, b) => {
     const block = blocks[b]!
-    const { first, second, html } = buttons[b]!
+    const { first, second, html, png } = buttons[b]!
     if (!first) return element
     const { Box } = el
     const hebrew = style.reorder && hasRtl(block.raw)
@@ -1157,13 +1157,14 @@ export const renderBlocks = (el: ElementTable, style: Style, blocks: Block[], co
     if (hover) {
       const wide = rtl && (block.kind === 'list' || block.kind === 'quote' || block.kind === 'alert' || rtlTables[b])
       const start = !!wide && (!!rtlTables[b] || leadSide(style, block, room(b)) === 'R')
-      return markedRow(el, `c${b}`, element, floating(fitted([first, second, html]), opensWithCopy(block), start), start)
+      return markedRow(el, `c${b}`, element, floating(fitted([first, second, html, png]), opensWithCopy(block), start), start)
     }
     const button = second ? (
       <el.Box key={`copies${b}`} flexDirection="row" columnGap={1}>
         {first}
         {second}
         {html}
+        {png}
       </el.Box>
     ) : first
     return (block.kind === 'quote' || block.kind === 'alert') && !mirrored(style) ? (

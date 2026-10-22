@@ -1,3 +1,6 @@
+import { ratexColor } from './latex'
+import { graphemes, width } from './render'
+
 export const MAC_TABLE_COPY = `
 ObjC.import('AppKit')
 var input = $.NSFileHandle.fileHandleWithStandardInput.readDataToEndOfFile
@@ -47,6 +50,71 @@ try {
 }
 `
 
+export const MAC_IMAGE_COPY = `
+ObjC.import('AppKit')
+var input = $.NSFileHandle.fileHandleWithStandardInput.readDataToEndOfFile
+var payload = JSON.parse(ObjC.unwrap($.NSString.alloc.initWithDataEncoding(input, $.NSUTF8StringEncoding)))
+var rgb = function (c) { return $.NSColor.colorWithSRGBRedGreenBlueAlpha(c[0] / 255, c[1] / 255, c[2] / 255, 1) }
+var font = $.NSFont.fontWithNameSize('Menlo', 14)
+if (!font) font = $.NSFont.monospacedSystemFontOfSizeWeight(14, 0)
+var attributes = $.NSMutableDictionary.dictionary
+attributes.setObjectForKey(font, $.NSFontAttributeName)
+attributes.setObjectForKey(rgb(payload.foreground), $.NSForegroundColorAttributeName)
+var pad = 16
+var cell = $('M').sizeWithAttributes(attributes).width
+var line = Math.ceil(font.ascender - font.descender + font.leading)
+var width = 2 * pad + Math.ceil(cell * payload.columns)
+var height = 2 * pad + line * payload.lines.length
+var bitmap = $.NSBitmapImageRep.alloc.initWithBitmapDataPlanesPixelsWidePixelsHighBitsPerSampleSamplesPerPixelHasAlphaIsPlanarColorSpaceNameBytesPerRowBitsPerPixel(null, width * 2, height * 2, 8, 4, true, false, $.NSDeviceRGBColorSpace, 0, 0)
+if (!bitmap) throw new Error('Cannot draw image')
+bitmap.size = $.NSMakeSize(width, height)
+$.NSGraphicsContext.saveGraphicsState
+$.NSGraphicsContext.setCurrentContext($.NSGraphicsContext.graphicsContextWithBitmapImageRep(bitmap))
+rgb(payload.background).setFill
+$.NSRectFill($.NSMakeRect(0, 0, width, height))
+payload.lines.forEach(function (runs, i) {
+  runs.forEach(function (run) { $(run.text).drawAtPointWithAttributes($.NSMakePoint(pad + run.at * cell, height - pad - (i + 1) * line), attributes) })
+})
+$.NSGraphicsContext.restoreGraphicsState
+var png = bitmap.representationUsingTypeProperties($.NSBitmapImageFileTypePNG, $.NSDictionary.dictionary)
+var pasteboard = $.NSPasteboard.generalPasteboard
+if (!png || !pasteboard) throw new Error('macOS clipboard is unavailable to this session')
+pasteboard.clearContents
+if (!pasteboard.setDataForType(png, $.NSPasteboardTypePNG)) throw new Error('Cannot write clipboard')
+var back = pasteboard.dataForType($.NSPasteboardTypePNG)
+if (!back || !back.isEqualToData(png)) throw new Error('Clipboard verification failed')
+`
+
+export const WIN_IMAGE_COPY = `
+$ErrorActionPreference = 'Stop'
+try {
+  Add-Type -AssemblyName System.Windows.Forms
+  Add-Type -AssemblyName System.Drawing
+  $payload = [Console]::In.ReadToEnd() | ConvertFrom-Json
+  $fg = [System.Drawing.Color]::FromArgb($payload.foreground[0], $payload.foreground[1], $payload.foreground[2])
+  $bg = [System.Drawing.Color]::FromArgb($payload.background[0], $payload.background[1], $payload.background[2])
+  $font = New-Object System.Drawing.Font('Consolas', 14, [System.Drawing.GraphicsUnit]::Pixel)
+  $flags = [System.Windows.Forms.TextFormatFlags]::NoPadding -bor [System.Windows.Forms.TextFormatFlags]::NoPrefix -bor [System.Windows.Forms.TextFormatFlags]::SingleLine
+  $cell = [System.Windows.Forms.TextRenderer]::MeasureText('MMMMMMMMMM', $font, (New-Object System.Drawing.Size(0, 0)), $flags).Width / 10
+  $line = $font.Height
+  $pad = 16
+  $bitmap = New-Object System.Drawing.Bitmap([int][Math]::Ceiling(2 * $pad + $cell * $payload.columns), [int](2 * $pad + $line * $payload.lines.Count))
+  $graphics = [System.Drawing.Graphics]::FromImage($bitmap)
+  $graphics.Clear($bg)
+  for ($i = 0; $i -lt $payload.lines.Count; $i++) {
+    foreach ($run in $payload.lines[$i]) {
+      $at = New-Object System.Drawing.Point([int]($pad + $run.at * $cell), [int]($pad + $i * $line))
+      [System.Windows.Forms.TextRenderer]::DrawText($graphics, [string]$run.text, $font, $at, $fg, $bg, $flags)
+    }
+  }
+  $graphics.Dispose()
+  [System.Windows.Forms.Clipboard]::SetImage($bitmap)
+} catch {
+  [Console]::Error.WriteLine($_.Exception.Message)
+  exit 1
+}
+`
+
 export type ClipboardBackend = 'macos' | 'linux' | 'windows'
 
 const ascii = (json: string): string =>
@@ -55,10 +123,15 @@ const ascii = (json: string): string =>
     return unit > 0x7e ? `\\u${unit.toString(16).padStart(4, '0')}` : json[i]
   }).join('')
 
-export const clipboardCommand = (backend: ClipboardBackend, html: string, text: string, systemRoot?: string) => backend === 'windows'
+const powershell = (systemRoot: string | undefined, script: string) =>
+  [`${systemRoot}\\System32\\WindowsPowerShell\\v1.0\\powershell.exe`, '-NoProfile', '-NonInteractive', '-STA', '-Command', script]
+
+export type HelperCommand = { stdin: string; argv: string[]; failure: string }
+
+export const clipboardCommand = (backend: ClipboardBackend, html: string, text: string, systemRoot?: string): HelperCommand => backend === 'windows'
   ? {
     stdin: ascii(JSON.stringify({ html, text: text.replace(/\r?\n/g, '\r\n') })),
-    argv: [`${systemRoot}\\System32\\WindowsPowerShell\\v1.0\\powershell.exe`, '-NoProfile', '-NonInteractive', '-STA', '-Command', WIN_TABLE_COPY],
+    argv: powershell(systemRoot, WIN_TABLE_COPY),
     failure: 'Windows clipboard helper failed',
   }
   : {
@@ -67,3 +140,35 @@ export const clipboardCommand = (backend: ClipboardBackend, html: string, text: 
       ? { argv: ['/usr/bin/osascript', '-l', 'JavaScript', '-e', MAC_TABLE_COPY], failure: 'macOS clipboard helper failed' }
       : { argv: ['copyq', 'eval', LINUX_TABLE_COPY, '-'], failure: 'CopyQ failed; install and start CopyQ in the graphical session' },
   }
+
+export const drawsImages = (backend: ClipboardBackend | null): boolean => backend === 'macos' || backend === 'windows'
+
+const rgbOf = (color: string | undefined, fallback: number[]): number[] => {
+  const c = color === undefined ? '' : ratexColor(color)
+  const short = /^#([0-9a-f])([0-9a-f])([0-9a-f])$/i.exec(c)
+  const hex = short ? `#${short[1]!.repeat(2)}${short[2]!.repeat(2)}${short[3]!.repeat(2)}` : c
+  return /^#[0-9a-f]{6}$/i.test(hex) ? [1, 3, 5].map(i => parseInt(hex.slice(i, i + 2), 16)) : fallback
+}
+
+export const imageLines = (text: string): { at: number; text: string }[][] => text.split('\n').map(line => {
+  const runs: { at: number; text: string }[] = []
+  let at = 0
+  let open = false
+  for (const g of graphemes(line)) {
+    const w = width(g)
+    if (open && w < 2) runs.at(-1)!.text += g
+    else runs.push({ at, text: g })
+    open = w < 2
+    at += w
+  }
+  return runs
+})
+
+export const imageCommand = (backend: ClipboardBackend, text: string, colors: { foreground?: string; background?: string }, systemRoot?: string): HelperCommand | null => {
+  if (!drawsImages(backend)) return null
+  const lines = imageLines(text)
+  const json = JSON.stringify({ lines, columns: Math.max(0, ...text.split('\n').map(width)), foreground: rgbOf(colors.foreground, [0, 0, 0]), background: rgbOf(colors.background, [255, 255, 255]) })
+  return backend === 'windows'
+    ? { stdin: ascii(json), argv: powershell(systemRoot, WIN_IMAGE_COPY), failure: 'Windows image helper failed' }
+    : { stdin: json, argv: ['/usr/bin/osascript', '-l', 'JavaScript', '-e', MAC_IMAGE_COPY], failure: 'macOS image helper failed' }
+}
