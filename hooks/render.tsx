@@ -659,31 +659,21 @@ const tableEdges = (style: Style, block: Extract<Block, { kind: 'table' }>, rtl:
   }
 }
 
-type Joint = 'l' | 's' | 'r'
-
-const gridFill = ({ Box, Text }: ElementTable, style: Style, k: string, w: number, color: string | undefined, dim: boolean, char: string) => (
+const gridSpan = ({ Box, Text }: ElementTable, style: Style, k: string, w: number, color: string | undefined, dim: boolean, text: string) => (
   <Box key={k} width={w} height={1} flexShrink={0} overflow="hidden">
-    <Box width={w + 3} flexShrink={0}>
-      <Text color={color} dimColor={dim} {...gridFace(style)}>{char.repeat(w + 3)}</Text>
+    <Box width={width(text) + 2} flexShrink={0}>
+      <Text color={color} dimColor={dim} {...gridFace(style)}>{text}</Text>
     </Box>
   </Box>
 )
 
-const gridJoint = ({ Box }: ElementTable, k: string, side: Joint, glyph: string, draw: (k: string, text: string) => RenderElement, space: (k: string) => RenderElement) => {
-  const g = <Box key={`${k}.gb`} width={1} flexShrink={0}>{draw(`${k}.g`, glyph)}</Box>
-  return [...(side === 'l' ? [] : [space(`${k}.a`)]), g, ...(side === 'l' ? [space(`${k}.a`)] : side === 's' ? [space(`${k}.b`)] : [])]
-}
-
-const gridEdge = (el: ElementTable, style: Style, k: string, [left, fill, mid, right]: string, widths: number[], bar: (k: string, text: string) => RenderElement) => {
-  const { Box } = el
+const gridEdge = (el: ElementTable, style: Style, k: string, [left, fill, mid, right]: string, widths: number[]) => {
   const t = style.theme
-  const fillOf = (key: string, w: number) => gridFill(el, style, key, w, t.tableRule, !t.tableRule, fill!)
-  const space = (key: string) => fillOf(key, 1)
   return (
-    <Box key={k} flexDirection="row">
-      {widths.map((w, i) => [gridJoint(el, `${k}.${i}w`, i === 0 ? 'l' : 's', i === 0 ? left! : mid!, bar, space), fillOf(`${k}.${i}`, w)])}
-      {gridJoint(el, `${k}.e`, 'r', right!, bar, space)}
-    </Box>
+    <el.Box key={k} flexDirection="row">
+      {widths.map((w, i) => gridSpan(el, style, `${k}.${i}`, w + (i === 0 ? 2 : 3), t.tableRule, !t.tableRule, (i === 0 ? left! + fill! : fill! + mid! + fill!) + fill!.repeat(w + 3)))}
+      {gridSpan(el, style, `${k}.e`, 2, t.tableRule, !t.tableRule, fill! + right!)}
+    </el.Box>
   )
 }
 
@@ -712,7 +702,7 @@ const renderTable = (el: ElementTable, style: Style, block: Extract<Block, { kin
       {order.map((c, i) => [
         i > 0 && spacer(`${k}.${c}g`),
         style.gridFace
-          ? gridFill(el, style, `${k}.${c}`, widths[c]!, t.tableRule, !heavy && !t.tableRule, heavy ? ruleChar : '─')
+          ? gridSpan(el, style, `${k}.${c}`, widths[c]!, t.tableRule, !heavy && !t.tableRule, (heavy ? ruleChar : '─').repeat(widths[c]! + 3))
           : <Text key={`${k}.${c}`} color={t.tableRule} dimColor={!heavy && !t.tableRule}>
               {(heavy ? ruleChar : '─').repeat(widths[c]!)}
             </Text>,
@@ -725,11 +715,10 @@ const renderTable = (el: ElementTable, style: Style, block: Extract<Block, { kin
   )
   const clipped = (lines: number) => (k: string, text: string) => clip(el, width(text), bar(`${k}.b`, text, lines), k)
   const gridWalls = !!style.gridFace && !mirror && !held
-  const pad = (k: string) => <Box key={k} width={1} flexShrink={0} />
   const edge = (k: string, parts: string) =>
-    gridWalls ? gridEdge(el, style, k, parts, order.map(c => widths[c]!), bar) : bar(k, (mirror ? WALL : parts[0]!) + order.map(c => parts[1]!.repeat(widths[c]! + 2)).join(parts[2]!) + (mirror ? WALL : parts[3]!))
-  const wallOf = (border: (k: string, text: string) => RenderElement, k: string, side: Joint, text: string) =>
-    gridWalls ? gridJoint(el, k, side, '│', border, pad) : border(k, wall(text))
+    gridWalls ? gridEdge(el, style, k, parts, order.map(c => widths[c]!)) : bar(k, (mirror ? WALL : parts[0]!) + order.map(c => parts[1]!.repeat(widths[c]! + 2)).join(parts[2]!) + (mirror ? WALL : parts[3]!))
+  const wallOf = (border: (k: string, text: string) => RenderElement, k: string, text: string) =>
+    gridWalls ? <Box key={`${k}.w`} width={width(text)} flexShrink={0}>{border(k, text)}</Box> : border(k, wall(text))
 
   const terminalRow = (cells: Inline[][], k: string, isHeader: boolean) => {
     const parts: Inline[] = box ? [{ kind: 'dim', text: '│ ' }] : []
@@ -749,7 +738,7 @@ const renderTable = (el: ElementTable, style: Style, block: Extract<Block, { kin
   const row = (cells: Inline[][], k: string, isHeader: boolean, border: (k: string, text: string) => RenderElement = bar) => rtl && style.shape === 'inverse' ? terminalRow(cells, k, isHeader) : (
     <Box key={k} flexDirection="row" columnGap={columnGap} alignItems="stretch">
       {!box && lead(k)}
-      {box && wallOf(border, `${k}.l`, 'l', '│ ')}
+      {box && wallOf(border, `${k}.l`, '│ ')}
       {order.map((c, i) => {
         const w = widths[c]!
         const cell = flowOf(style, cells[c] ?? [], Infinity, marked)
@@ -765,9 +754,9 @@ const renderTable = (el: ElementTable, style: Style, block: Extract<Block, { kin
                 : <Text>{renderInline(el, style, content, `${k}.${c}`)}</Text>)}
           </Box>
         )
-        return [i > 0 && (box ? wallOf(border, `${k}.${c}s`, 's', ' │ ') : spacer(`${k}.${c}g`)), cellBox]
+        return [i > 0 && (box ? wallOf(border, `${k}.${c}s`, ' │ ') : spacer(`${k}.${c}g`)), cellBox]
       })}
-      {box && wallOf(border, `${k}.r`, 'r', ' │')}
+      {box && wallOf(border, `${k}.r`, ' │')}
     </Box>
   )
 

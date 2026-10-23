@@ -10,7 +10,7 @@ type EdgeUi = {
 export const topEdgeWidth = async (ui: EdgeUi, columns: number) => {
   const whole = await ui.find({ type: 'Text', text: /^┌[─┬]+┐$/ })
   if (whole) return width(whole.text)
-  const spans = (await ui.findAll({ type: 'Box' })).filter(b => b.props.overflow === 'hidden' && b.props.height === 1).slice(0, 3 * columns)
-  expect(spans).toHaveLength(3 * columns)
-  return columns + 1 + spans.reduce((sum, b) => sum + (b.props.width as number), 0)
+  const spans = (await ui.findAll({ type: 'Box' })).filter(b => b.props.overflow === 'hidden' && b.props.height === 1).slice(0, columns + 1)
+  expect(spans).toHaveLength(columns + 1)
+  return spans.reduce((sum, b) => sum + (b.props.width as number), 0)
 }

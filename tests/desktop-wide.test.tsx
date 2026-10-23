@@ -52,3 +52,20 @@ for (const version of ['2.1.287', '2.1.296']) {
     await ui.unmount()
   })
 }
+
+test('a box table on desktop costs under two and a half times the nodes it costs on a terminal', { options: { tableStyle: 'box' } }, async ($, on) => {
+  claudeAt(on, '2.1.299')
+  const rows = Array.from({ length: 50 }, (_, i) => `| ${i} | svc-${i} | us-east | ${i * 3} | ${i % 90}ms |`).join('\n')
+  const text = `| id | service | region | pods | p95 |\n|---|---|---|---|---|\n${rows}`
+  const nodes = async (surface: 'terminal' | 'desktop') => {
+    const ui = await withMono($.ui.mount(mount(text, surface)))
+    if (!ui) return undefined
+    const total = (await ui.findAll({ type: 'Box' })).length + (await ui.findAll({ type: 'Text' })).length
+    await ui.unmount()
+    return total
+  }
+  const terminal = await nodes('terminal')
+  const desktop = await nodes('desktop')
+  if (desktop === undefined) return
+  expect(desktop).toBeLessThan(terminal! * 2.5)
+})
