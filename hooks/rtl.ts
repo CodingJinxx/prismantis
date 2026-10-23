@@ -29,10 +29,12 @@ const LATIN = /[A-Za-zÀ-ɏ]/
 const MARK = /\p{M}/u
 const MIRROR: Record<string, string> = { '(': ')', ')': '(', '[': ']', ']': '[', '{': '}', '}': '{', '<': '>', '>': '<' }
 const DIGIT = /[0-9\u0660-\u0669\u06F0-\u06F9]/
-const TERMINATOR = /[%\u2030\u00B0$\u20AC\u00A3\u00A5\u20AA]/
+const TERMINATOR = /[#%\u2030\u00B0$\u20AC\u00A3\u00A5\u20AA]/
 const COMMENT = /^(.*?)((?:^|\s)(?:#|\/\/)\s+)(.*)$/
 
 const classify = (ch: string): Dir | null => (R.test(ch) ? 'R' : L.test(ch) ? 'L' : null)
+
+const byDigit = (us: Unit[], i: number): boolean => TERMINATOR.test(us[i]!.ch) && (DIGIT.test(us[i - 1]?.ch ?? '') || DIGIT.test(us[i + 1]?.ch ?? ''))
 
 const units = (text: string, fmt: Fmt): Unit[] => {
   const out: Unit[] = []
@@ -52,9 +54,7 @@ const flatten = (nodes: Inline[], wrap: Fmt['wrap'] = []): Unit[] =>
       case 'strike':
         return flatten(n.children, [...wrap, n.kind])
       case 'link':
-        return n.text === n.href
-          ? units(n.text, { wrap, leaf: 'link', href: n.href })
-          : [...units(n.text, { wrap, leaf: 'link', href: n.href }), ...units(` (${n.href})`, { wrap, leaf: 'dim' })]
+        return units(n.text, { wrap, leaf: 'link', href: n.href })
       case 'image':
         return units(n.text, { wrap, leaf: 'text' })
       case 'path':
@@ -97,8 +97,8 @@ const reorder = <U extends Unit>(all: U[], base: Dir): U[] => {
   const strong = all.map((u, i) => {
     const own = classify(u.ch)
     if (own) return own
-    if (u.fmt.leaf === 'code' || u.fmt.leaf === 'math' || u.fmt.leaf === 'path') return 'L'
-    return TERMINATOR.test(u.ch) && (DIGIT.test(all[i - 1]?.ch ?? '') || DIGIT.test(all[i + 1]?.ch ?? '')) ? 'L' : null
+    if (u.fmt.leaf === 'code' || u.fmt.leaf === 'math' || u.fmt.leaf === 'path' || (u.fmt.leaf === 'link' && /^file:/i.test(u.fmt.href ?? ''))) return 'L'
+    return byDigit(all, i) ? 'L' : null
   })
   const prev: (Dir | null)[] = []
   let seen: Dir | null = null
@@ -227,6 +227,8 @@ const asWritten = (shape: Shape) => shape === 'logical' || shape === 'mirror' ||
 
 const ISOLATED: Fmt['leaf'][] = ['code', 'math', 'path']
 
+const HELD_EDGES: Fmt['leaf'][] = [...ISOLATED, 'link']
+
 const isolate = (all: Unit[]): Unit[] =>
   all.flatMap((u, i) => {
     if (!ISOLATED.includes(u.fmt.leaf)) return [u]
@@ -244,11 +246,14 @@ const strongFrom = (line: Unit[], i: number, step: 1 | -1): Dir => {
   return 'R'
 }
 
+const anchored = (span: Unit[], i: number): boolean =>
+  classify(span[i]!.ch) !== null || byDigit(span, i)
+
 const swapEdges = (span: Unit[]): Unit[] => {
   let a = 0
-  while (a < span.length && !classify(span[a]!.ch)) a++
+  while (a < span.length && !anchored(span, a)) a++
   let b = span.length
-  while (b > a && !classify(span[b - 1]!.ch)) b--
+  while (b > a && !anchored(span, b - 1)) b--
   return [...turn(span.slice(b)), ...span.slice(a, b), ...turn(span.slice(0, a))]
 }
 
@@ -256,7 +261,7 @@ const holdEdges = (line: Unit[]): Unit[] => {
   const out = [...line]
   for (let i = 0, j = 0; i < line.length; i = j) {
     j = i + 1
-    if (!ISOLATED.includes(line[i]!.fmt.leaf)) continue
+    if (!HELD_EDGES.includes(line[i]!.fmt.leaf)) continue
     while (j < line.length && sameFmt(line[j]!.fmt, line[i]!.fmt)) j++
     const span = line.slice(i, j)
     if (!span.some(u => classify(u.ch) === 'R') && strongFrom(line, i - 1, -1) !== 'L' && strongFrom(line, j, 1) !== 'L') out.splice(i, span.length, ...swapEdges(span))
