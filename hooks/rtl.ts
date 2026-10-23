@@ -57,8 +57,10 @@ const flatten = (nodes: Inline[], wrap: Fmt['wrap'] = []): Unit[] =>
         return units(n.text, { wrap, leaf: 'link', href: n.href })
       case 'image':
         return units(n.text, { wrap, leaf: 'text' })
-      case 'path':
-        return units(n.text, { wrap, leaf: 'path', href: n.href })
+      case 'path': {
+        const [, body = n.text, dot = ''] = /^(.*\w)(\.)$/.exec(n.text) ?? []
+        return [...units(body, { wrap, leaf: 'path', href: n.href }), ...units(dot, { wrap, leaf: 'text' })]
+      }
       default:
         return units(n.text, { wrap, leaf: n.kind })
     }
