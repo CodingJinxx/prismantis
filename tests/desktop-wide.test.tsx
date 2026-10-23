@@ -1,5 +1,6 @@
 import { expect, test } from 'claude-code/testing'
 
+import { claudeAt, withMono } from './claude-version'
 import { topEdgeWidth } from './table-edge'
 
 const mount = (text: string, surface: 'terminal' | 'desktop') => ({
@@ -11,8 +12,10 @@ const mount = (text: string, surface: 'terminal' | 'desktop') => ({
 })
 
 for (const surface of ['terminal', 'desktop'] as const) {
-  test(`${surface} draws the borders and rules that depend on cell width in the monospaced face on desktop only`, { options: { tableStyle: 'box' } }, async $ => {
-    const ui = await $.ui.mount(mount('| a | b |\n|---|---|\n| x | y |\n\n---\n\ntext after', surface))
+  test(`${surface} draws the borders and rules that depend on cell width in the monospaced face on desktop only`, { options: { tableStyle: 'box' } }, async ($, on) => {
+    claudeAt(on, '2.1.299')
+    const ui = await withMono($.ui.mount(mount('| a | b |\n|---|---|\n| x | y |\n\n---\n\ntext after', surface)))
+    if (!ui) return
     const lines = (await ui.findAll({ type: 'Text' })).filter(t => /^[┌├└╞]/.test(t.text) || /^─+$/.test(t.text))
     expect(lines.length).toBeGreaterThanOrEqual(4)
     for (const line of lines) {
@@ -25,10 +28,27 @@ for (const surface of ['terminal', 'desktop'] as const) {
 }
 
 for (const [surface, room] of [['terminal', 149], ['desktop', 124]] as const) {
-  test(`${surface} lays a wide table out to the room its cells really have`, { options: { tableStyle: 'box' } }, async $ => {
+  test(`${surface} lays a wide table out to the room its cells really have`, { options: { tableStyle: 'box' } }, async ($, on) => {
+    claudeAt(on, '2.1.299')
     const long = 'word '.repeat(60).trim()
-    const ui = await $.ui.mount(mount(`| a | b |\n|---|---|\n| ${long} | ${long} |`, surface))
+    const ui = await withMono($.ui.mount(mount(`| a | b |\n|---|---|\n| ${long} | ${long} |`, surface)))
+    if (!ui) return
     expect(await topEdgeWidth(ui, 2)).toBe(room)
+    await ui.unmount()
+  })
+}
+
+for (const version of ['2.1.287', '2.1.296']) {
+  test(`desktop on Claude Code ${version}, which refuses the mono prop, draws tables as before`, { options: { tableStyle: 'box' } }, async ($, on) => {
+    claudeAt(on, version)
+    const long = 'word '.repeat(60).trim()
+    const ui = await $.ui.mount(mount(`| a | b |
+|---|---|
+| ${long} | ${long} |
+
+---`, 'desktop'))
+    expect((await ui.findAll({ type: 'Text' })).some(t => t.props.mono !== undefined)).toBe(false)
+    expect(await topEdgeWidth(ui, 2)).toBe(149)
     await ui.unmount()
   })
 }

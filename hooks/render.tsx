@@ -93,6 +93,7 @@ const headerRuns = (nodes: Inline[]): Inline[] =>
 const HTTP_LINKS_FROM = [2, 1, 289]
 const EDITOR_LINKS_FROM = [2, 1, 294]
 const CLICKABLE_MARKS_FROM = [2, 1, 295]
+const MONO_TEXT_FROM = [2, 1, 299]
 
 const releaseFrom = (from: readonly number[]) => (base?: string): boolean => {
   const m = /^(\d+)\.(\d+)\.(\d+)/.exec(base ?? '')
@@ -107,6 +108,8 @@ export const takesHttpLinks = releaseFrom(HTTP_LINKS_FROM)
 export const takesEditorLinks = releaseFrom(EDITOR_LINKS_FROM)
 
 export const takesClickableMarks = releaseFrom(CLICKABLE_MARKS_FROM)
+
+export const takesMonoText = releaseFrom(MONO_TEXT_FROM)
 
 export const fileRoot = (distro?: string): string => (distro ? `file://wsl.localhost/${encodeURIComponent(distro)}` : 'file://')
 
