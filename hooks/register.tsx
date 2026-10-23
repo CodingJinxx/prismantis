@@ -604,7 +604,7 @@ export const register: Register = (on, options) => {
   const probes: Probes = {}
   const pathChecks: PathChecks = { asked: new Set(), batch: [], found: new Set() }
   const forSurface = (base: Style, surface: RenderSurface, links: LinkReach): Style => {
-    const drawn = surface === 'terminal' ? (links.http || links.editor ? { ...base, httpLinks: links.http, editorLinks: links.editor, fileLinks: links.files, pathLinks: links.paths } : base) : { ...base, htmlCopy: null, nativeCode: true, gridFace: surface === 'desktop' && links.mono }
+    const drawn = surface === 'terminal' ? (links.http || links.editor ? { ...base, httpLinks: links.http, editorLinks: links.editor, fileLinks: links.files, pathLinks: links.paths } : base) : { ...base, htmlCopy: null, nativeCode: true, desktop: surface === 'desktop', gridFace: surface === 'desktop' && links.mono }
     return surface === 'mobile' && drawn.copyButtonStyle === 'hover' ? { ...drawn, copyButtonStyle: 'inline' } : drawn
   }
   const fullWidth = (text: string) => (style.reorder && hasRtl(text) ? { width: '100%' as const } : {})
