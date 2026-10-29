@@ -490,11 +490,10 @@ test('tables draw boxed by default, with a double line under the header', async 
       const lines = [top, ...(await Promise.all(edges.slice(1).map(async re => (await ui.find({ type: 'Text', text: re }))?.text ?? '')))]
       expect(lines.every(l => l.length === top.length && l.length > 0)).toBe(true)
     } else {
-      for (const [left, fill, mid, right] of ['┌─┬┐', '╞═╪╡', '├─┼┤', '└─┴┘']) {
-        expect(await ui.find({ type: 'Text', text: new RegExp(`^${left}${fill}`) })).toBeDefined()
-        expect((await ui.findAll({ type: 'Text', text: new RegExp(`^${fill}${mid}${fill}`) })).length).toBeGreaterThanOrEqual(2)
-        expect(await ui.find({ type: 'Text', text: new RegExp(`^${fill}${right}$`) })).toBeDefined()
-      }
+      const walls = (await ui.findAll({ type: 'Text', text: /^(┌─|─┬─|─┐)\n/ })).map(w => w.text)
+      expect(walls).toEqual(['┌─\n│ \n╞═\n│ \n├─\n│ \n└─', '─┬─\n │ \n═╪═\n │ \n─┼─\n │ \n─┴─', '─┬─\n │ \n═╪═\n │ \n─┼─\n │ \n─┴─', '─┐\n │\n═╡\n │\n─┤\n │\n─┘'])
+      expect((await ui.findAll({ type: 'Text', text: /^─+$/ })).length).toBe(9)
+      expect((await ui.findAll({ type: 'Text', text: /^═+$/ })).length).toBe(3)
     }
     expect((await ui.find({ type: 'Text', text: /^Service$/ }))?.props.color).toBe(PRESETS['catppuccin-mocha'].tableHeader)
     await ui.unmount()
