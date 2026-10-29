@@ -1,5 +1,6 @@
 import type { ElementTable, RenderElement, RenderNode, TextHoverProps } from 'claude-code'
 
+import { figureText, isFigureLang } from './figure'
 import { tableHtml, tableText } from './html'
 import type { Block, Inline } from './markdown'
 import { mathOf } from './latex'
@@ -657,6 +658,8 @@ const heldCode = (el: ElementTable, style: Style, lines: string[], shown: number
       </el.Box>
     )))
 
+const figureFallbackLines = (block: Extract<Block, { kind: 'code' }>): string[] => isFigureLang(block.lang) ? block.lines.map(figureText) : block.lines
+
 const codeRows = (el: ElementTable, style: Style, lines: string[], shown: number, lang: string, numbered: boolean, room: number, key: string): RenderElement[] => {
   if (style.nativeCode) return [<el.Code key="code" source={lines.slice(0, shown).join('\n') || ' '} {...(lang ? { language: lang } : {})} {...(numbered ? { startLine: 1 } : {})} />]
   const rows = (isShellLang(lang) ? null : highlightBlock(el, style, lines, lang, key, room))?.slice(0, shown) ?? lines.slice(0, shown).map((line, i) => codeLine(el, style, line, lang, `${key}.${i}`, room))
@@ -1261,7 +1264,7 @@ export const renderBlocks = (el: ElementTable, style: Style, blocks: Block[], co
         const done = drawn.get(b)?.element
         if (done) return done
         const note = drawn.get(b)?.note
-        const lines = block.lines
+        const lines = figureFallbackLines(block)
         const toggle = lines.length > FOLD_AT ? fold?.(codeId(lines), lines.length - FOLD_SHOW, `fold${b}`) : null
         const shown = toggle?.folded ? FOLD_SHOW : lines.length
         const numbered = lines.length >= NUMBER_AT && lines.length <= NUMBER_MAX
