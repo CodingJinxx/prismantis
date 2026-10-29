@@ -27,7 +27,7 @@ for (const surface of ['terminal', 'desktop'] as const) {
   })
 }
 
-for (const [surface, room] of [['terminal', 149], ['desktop', 124]] as const) {
+for (const [surface, room] of [['terminal', 147], ['desktop', 122]] as const) {
   test(`${surface} lays a wide table out to the room its cells really have`, { options: { tableStyle: 'box' } }, async ($, on) => {
     claudeAt(on, '2.1.299')
     const long = 'word '.repeat(60).trim()
@@ -48,7 +48,7 @@ for (const version of ['2.1.287', '2.1.296']) {
 
 ---`, 'desktop'))
     expect((await ui.findAll({ type: 'Text' })).some(t => t.props.mono !== undefined)).toBe(false)
-    expect(await topEdgeWidth(ui, 2)).toBe(149)
+    expect(await topEdgeWidth(ui, 2)).toBe(147)
     await ui.unmount()
   })
 }

@@ -2,6 +2,30 @@
 
 All notable changes to this project are documented here. The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and the project uses [Semantic Versioning](https://semver.org/).
 
+## [0.36.0] - 2026-10-26
+
+### Added
+
+- A `▣ png` button next to `⧉ art` on tables, diagrams and figures copies a picture of the drawn art, in the theme's text and background colors. It shows in a local macOS or Windows terminal and needs nothing installed; Linux hides it. Hebrew cells read in drawn order, wide letters stay in their box, and bars and box sides have no gaps between rows. If the helper fails, it copies the text and the toast says why ([#276](https://github.com/NahumLitvin/prismantis/pull/276)).
+- Links that open a file in Cursor, Windsurf or Zed (`cursor://file/…`, `windsurf://file/…`, `zed://file/…`, with an optional `:line` or `:line:column`) are clickable from Claude Code 2.1.294 on, like `vscode://file/…`. Other links of these editors stay text ([#304](https://github.com/NahumLitvin/prismantis/pull/304)).
+
+### Fixed
+
+- In a figure, a Hebrew label with English words in it, like `נעלם מ-Saved Tabs` or `(נמצא ב-Recent Sessions)`, reads in one piece with its brackets the right way round, on every terminal ([#291](https://github.com/NahumLitvin/prismantis/pull/291)).
+
+## [0.35.2] - 2026-10-26
+
+### Fixed
+
+- On iTerm, the last rows of a long expanded Bash output no longer end in a broken letter, and a cantillated or emoji line that fits is drawn whole ([#299](https://github.com/NahumLitvin/prismantis/pull/299)).
+
+## [0.35.1] - 2026-10-24
+
+### Fixed
+
+- On iTerm, Hebrew lines in an edit's diff card, a new file's card and a code block stay inside the card, next to their line numbers, instead of jumping to the right edge ([#288](https://github.com/NahumLitvin/prismantis/pull/288)).
+- On iTerm, Hebrew lines in Bash output stay next to their gutter instead of jumping to the right edge: with `toolOutput: quiet`, in an expanded Bash call (long lines included, command and output) and in a failed tool's reason. A shell code block with a line that opens with Hebrew keeps its colors again ([#289](https://github.com/NahumLitvin/prismantis/pull/289)).
+
 ## [0.35.0] - 2026-10-23
 
 ### Added

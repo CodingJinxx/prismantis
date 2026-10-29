@@ -6,12 +6,12 @@ import type { Formula } from './latex'
 import { LATEX_DPR, LATEX_FONT_PX, MAX_IMAGE_BYTES, fitImage, fitsImage, imageFile, imageOf, keepFormulas, mathOf, padFor, pickFormula, pngSize, ratexColor, renderedOf } from './latex'
 import type { Block } from './markdown'
 import { nestedBlocks, parse } from './markdown'
-import type { ClipboardBackend } from './clipboard'
-import { clipboardCommand } from './clipboard'
+import type { ClipboardBackend, HelperCommand } from './clipboard'
+import { clipboardCommand, drawsImages, imageCommand } from './clipboard'
 import { FIGURE_HINT } from './figure'
 import { drawDiagrams } from './mermaid'
 import type { CopyButton, DrawPaste, Fold, TerminalEnv } from './render'
-import { MARK, bashEdits, drawMath, drawsHyperlinks, editNotes, fileRoot, hasShellOutput, instanceKey, isReadOnlyCall, leftToEngine, markerRoom, mirrored, noteTip, pasteLang, pathsToProbe, remember, rememberCall, renderBashEdits, renderBlocks, renderDiffCard, renderExpandedShell, renderFailure, renderShellResult, renderToolGroup, renderToolRow, renderTurnDuration, renderUserPrompt, takesClickableMarks, takesEditorLinks, takesHttpLinks, takesMonoText, withoutBashEdits } from './render'
+import { MARK, bashEdits, drawMath, drawsHyperlinks, editNotes, fileRoot, hasShellOutput, instanceKey, isReadOnlyCall, leftToEngine, markerRoom, mirrored, noteTip, pasteLang, pathsToProbe, remember, rememberCall, renderBashEdits, renderBlocks, renderDiffCard, renderExpandedShell, renderFailure, renderReply, renderShellResult, renderToolGroup, renderToolRow, renderTurnDuration, renderUserPrompt, replyRoom, replyStyleFor, takesClickableMarks, takesEditorLinks, takesHttpLinks, takesMonoText, withoutBashEdits } from './render'
 import type { SetupStep } from './help'
 import { HINT, ISSUE_HINT, SETUP_DONE, SETUP_PANE_KEYS, SETUP_PANE_OPENED, THEME_PREVIEW, findSetup, helpText, languageShowcase, rtlShowcaseText, setupParts, setupSteps, setupText, showcaseText } from './help'
 import { PRESET_NAMES } from './presets'
@@ -203,12 +203,14 @@ const pictureOf = async ($: EngineInterface, src: string, home: string): Promise
 
 const loaded = new Map<string, Promise<Omit<Picture, 'alt'> | null>>()
 
-const picturesOf = async ($: EngineInterface, style: Style, probes: Probes, surface: string, blocks: Block[]): Promise<Map<number, Picture>> => {
+const imagesOn = async ($: EngineInterface, probes: Probes, surface: RenderSurface): Promise<boolean> => surface === 'terminal' && (await (probes.images ??= showsImages($).catch(() => false)))
+
+const picturesOf = async ($: EngineInterface, style: Style, probes: Probes, surface: RenderSurface, blocks: Block[]): Promise<Map<number, Picture>> => {
   const images = [...blocks.entries()].flatMap(([i, block]) => {
     const image = imageOf(block)
     return image ? [{ i, ...image }] : []
   })
-  if (surface !== 'terminal' || images.length === 0 || !(await (probes.images ??= showsImages($).catch(() => false)))) return new Map()
+  if (images.length === 0 || !(await imagesOn($, probes, surface))) return new Map()
   await locate($, style)
   const found = await Promise.all(images.map(async ({ i, alt, src }) => {
     const picture = await remember(loaded, src, () => pictureOf($, src, style.home), 50)
@@ -317,14 +319,20 @@ const probe = async ($: EngineInterface, style: Style, probes: Probes): Promise<
   return terminal
 }
 
-const copyTable = async ($: EngineInterface, backend: ClipboardBackend, html: string, text: string): Promise<string | null> => {
+const runHelper = async ($: EngineInterface, backend: ClipboardBackend, build: (systemRoot?: string) => HelperCommand): Promise<string | null> => {
   const systemRoot = backend === 'windows' ? await $.env.get('SystemRoot') : undefined
-  const command = clipboardCommand(backend, html, text, systemRoot)
+  const command = build(systemRoot)
   if (backend === 'windows' && !systemRoot) return command.failure
-  const result = await $.process.run(command.argv, { stdin: command.stdin, timeoutMs: 5000 }).catch(() => null)
+  const result = await $.process.run(command.argv, { stdin: command.stdin, timeoutMs: backend === 'windows' ? 15000 : 5000 }).catch(() => null)
   if (!result) return command.failure
   return result.exitCode === 0 ? null : result.stderr.trim() || command.failure
 }
+
+const richCommand = (style: Style, backend: ClipboardBackend, content: string, rich: (() => string) | 'png') => (systemRoot?: string): HelperCommand => rich === 'png'
+  ? imageCommand(backend, content, { foreground: style.theme.diagramText ?? style.theme.codeText, background: style.background }, systemRoot)
+  : clipboardCommand(backend, rich(), content, systemRoot)
+
+const offers = (style: Style, rich?: (() => string) | 'png'): boolean => !rich || (rich === 'png' ? drawsImages(style.htmlCopy) : !!style.htmlCopy)
 
 const folder = ($: EngineInterface, el: ReturnType<EngineInterface['ui']['resolve']>, open?: string[], faces = false): Fold => (id, hidden, key, look) => {
   if (!open) return null
@@ -336,19 +344,20 @@ const folder = ($: EngineInterface, el: ReturnType<EngineInterface['ui']['resolv
   return { folded, faced: look?.face !== undefined, element, around: (rows, hover) => <el.Button key={`${key}.rows`} plain label={label} hover={hover} onPress={toggle}>{rows}</el.Button> }
 }
 
+const copyOut = async ($: EngineInterface, style: Style, content: string, surface: RenderSurface, rich?: (() => string) | 'png'): Promise<string> => {
+  const backend = style.htmlCopy
+  const failure = rich && backend ? await runHelper($, backend, richCommand(style, backend, content, rich)) : undefined
+  if (failure === null) return rich === 'png' ? 'Copied as image' : 'Copied formatted table'
+  const result = await $.ui.copy({ text: content, surface })
+  if (!result.isCopied) return `Copy failed: ${result.reason}`
+  return failure ? `Copied as plain text (${failure})` : 'Copied'
+}
+
 const drawMarkdown = ($: EngineInterface, el: ReturnType<EngineInterface['ui']['resolve']>, style: Style, blocks: ReturnType<typeof parse>, columns: number, math: Map<number, Typeset> = new Map(), pictures: Map<number, Picture> = new Map(), reply?: string, open?: string[], notes?: { id: string; press: boolean }): RenderElement[] => {
   const { Button } = el
-  const copy = (text: string | (() => string), key: string, label = '⧉ copy', html?: () => string) => {
-    const copied = async (surface: RenderSurface): Promise<string> => {
-      const content = typeof text === 'function' ? text() : text
-      const backend = style.htmlCopy
-      const failure = html && backend ? await copyTable($, backend, html(), content) : undefined
-      if (failure === null) return 'Copied formatted table'
-      const result = await $.ui.copy({ text: content, surface })
-      if (!result.isCopied) return `Copy failed: ${result.reason}`
-      return failure ? `Copied as plain text (${failure})` : 'Copied'
-    }
-    return style.copyButtons && (!html || style.htmlCopy) ? (
+  const copy = (text: string | (() => string), key: string, label = '⧉ copy', rich?: (() => string) | 'png') => {
+    const copied = (surface: RenderSurface) => copyOut($, style, typeof text === 'function' ? text() : text, surface, rich)
+    return style.copyButtons && offers(style, rich) ? (
       <Button
         key={key}
         variant="primary"
@@ -512,7 +521,7 @@ const SETUP_TABLE = '| Item | Qty |\n|:-----|----:|\n| Apples | 3 |\n| Pears | 5
 const SETUP_SENT = new Date(2026, 0, 15, 14, 32).getTime()
 
 const copySample = (el: ReturnType<EngineInterface['ui']['resolve']>, style: Style, value: string, id: string, columns: number): RenderElement[] => {
-  const label: CopyButton = (_text, key, name = '⧉ copy', html) => (html && !style.htmlCopy ? null : <el.Text key={key} bold>{`[ ${name} ]`}</el.Text>)
+  const label: CopyButton = (_text, key, name = '⧉ copy', rich) => (offers(style, rich) ? <el.Text key={key} bold>{`[ ${name} ]`}</el.Text> : null)
   const table = renderBlocks(el, style, parse(SETUP_TABLE, { numbers: style.highlightNumbers, paths: style.highlightPaths }), columns, new Map(), label)
   return [
     <el.Box key={`${id}t`} flexDirection="column">{table}</el.Box>,
@@ -524,6 +533,16 @@ const clockSample = (el: ReturnType<EngineInterface['ui']['resolve']>, style: St
   const time = value === '24h' || value === '12h' ? clockText(SETUP_SENT, SETUP_SENT, value) : undefined
   const prompt = style.promptStyle === 'off' ? <el.Text dimColor>{`> ${time === undefined ? '' : `[${time}] `}fix the failing test`}</el.Text> : renderUserPrompt(el, style, 'fix the failing test', columns, time)
   return [<el.Box key={`${id}p`}>{prompt}</el.Box>, <el.Box key={`${id}d`}>{renderTurnDuration(el, style, 'Baked', 115000, time)}</el.Box>]
+}
+
+const promptSample = (el: ReturnType<EngineInterface['ui']['resolve']>, style: Style, value: string, id: string, columns: number): RenderElement[] =>
+  [value === 'off' ? <el.Text key={id} dimColor>{'> fix the failing test'}</el.Text> : <el.Box key={id}>{renderUserPrompt(el, style, 'fix the failing test', columns)}</el.Box>]
+
+const SETUP_REPLY = 'The failing test passes now: `retries` was read before the config loaded.'
+
+const replySample = ($: EngineInterface, el: ReturnType<EngineInterface['ui']['resolve']>, style: Style, id: string, columns: number): RenderElement[] => {
+  const drawn = drawMarkdown($, el, style, parse(SETUP_REPLY, { numbers: style.highlightNumbers, paths: style.highlightPaths }), columns - replyRoom(style))
+  return [<el.Box key={id} flexDirection="column">{renderReply(el, style, drawn, true, columns, false)}</el.Box>]
 }
 
 const SETUP_EDIT = {
@@ -566,12 +585,13 @@ const drawSetup = ($: EngineInterface, el: ReturnType<EngineInterface['ui']['res
   const key = setupSteps(PRESET_NAMES)[found.at]!.key
   const md = (style: Style, text: string, id: string) => <el.Box key={id} flexDirection="column" rowGap={1}>{drawMarkdown($, el, style, parse(text, { numbers: style.highlightNumbers, paths: style.highlightPaths }), columns)}</el.Box>
   const sample = (style: Style, value: string, id: string): RenderElement[] => {
-    if (key === 'promptStyle') return [value === 'off' ? <el.Text key={id} dimColor>{'> fix the failing test'}</el.Text> : <el.Box key={id}>{renderUserPrompt(el, style, 'fix the failing test', columns)}</el.Box>]
+    if (key === 'promptStyle') return promptSample(el, style, value, id, columns)
     if (key === 'toolStyle') return [md({ ...style, narration: style.toolStyle === 'tree-bold' }, 'Reading the config.', `${id}s`), <el.Box key={id}>{renderToolRow(el, style, { tool: 'Read', input: { file_path: 'src/config.ts' }, isRunning: false, isErrored: false, isInterrupted: false }, columns)}</el.Box>]
     if (key === 'toolOutput') return toolOutputSample(el, style, value, id, columns)
     if (key === 'diffStyle') return diffSample(el, style, id, columns)
     if (key === 'copyButtonStyle') return copySample(el, style, value, id, columns)
     if (key === 'clock') return clockSample(el, style, value, id, columns)
+    if (key === 'replyStyle') return replySample($, el, style, id, columns)
     return []
   }
   const picks = found.parts.options.map(({ value, text }, i) => {
@@ -636,7 +656,7 @@ export const register: Register = (on, options) => {
       if (quiet && isReadOnlyCall(e.props.tool, e.props.input)) rememberCall(readOnlyCalls, e.props.tool_use_id)
       if (!expandedCalls.has(e.props.tool_use_id)) return renderToolRow($.ui.resolve(e), forSurface(fit(e.viewport), e.surface, await linkReach($, probes, style)), e.props, e.viewport?.columns)
       const shell = e.props.tool === 'Bash' || e.props.tool === 'PowerShell'
-      return shell && typeof e.props.output !== 'string' ? renderExpandedShell($.ui.resolve(e), fit(e.viewport), e.props) : next(e)
+      return shell && typeof e.props.output !== 'string' ? renderExpandedShell($.ui.resolve(e), fit(e.viewport), e.props, e.viewport?.columns) : next(e)
     })
     on('ui.render', { component: 'ToolResult' }, async ($, e, next) => {
       const cards = (): Style => ({ ...fit(e.viewport), pressPreview: e.surface === 'terminal' })
@@ -759,7 +779,7 @@ export const register: Register = (on, options) => {
       landing = land
       if (land) landSetupFocus($, land)
     }
-    const base = { ...forSurface(fit(e.viewport), e.surface, await linkReach($, probes, style)), copyButtons: false, pathLinks: false }
+    const base = { ...forSurface(fit(e.viewport), e.surface, await linkReach($, probes, style)), copyButtons: false, pathLinks: false, images: await imagesOn($, probes, e.surface) }
     const view: SetupView = { el: $.ui.resolve(e), base, options, at, step, current: currentOf(step), columns: e.props.bodyColumns, rows: e.props.scroll.bodyRows, pick: value => void pickInPane($, picked, at, value, currentOf) }
     return setupKeyboardPane($, view, await read($, setupFocus), picked.theme)
   })
@@ -773,7 +793,7 @@ export const register: Register = (on, options) => {
     const found = e.props.command === 'prismantis' ? findSetup(PRESET_NAMES, e.props.text) : undefined
     if (found) {
       const el = $.ui.resolve(e)
-      const base = { ...forSurface(fit(e.viewport), e.surface, await linkReach($, probes, style)), copyButtons: false, pathLinks: false }
+      const base = { ...forSurface(fit(e.viewport), e.surface, await linkReach($, probes, style)), copyButtons: false, pathLinks: false, images: await imagesOn($, probes, e.surface) }
       return <el.Box flexDirection="column" rowGap={1}>{drawSetup($, el, base, options, found, columnsOf(e.viewport, base))}</el.Box>
     }
     const blocks = parseCached(e.props.text)
@@ -784,7 +804,7 @@ export const register: Register = (on, options) => {
     const math = await mathOfBlocks($, latex, e.surface, blocks)
     const pictures = await picturesOf($, style, probes, e.surface, blocks)
     const open = await read($, unfolded)
-    const surfaceStyle = await withFoundPaths($, pathChecks, forSurface(fit(e.viewport), e.surface, reach), blocks)
+    const surfaceStyle = { ...(await withFoundPaths($, pathChecks, forSurface(fit(e.viewport), e.surface, reach), blocks)), images: await imagesOn($, probes, e.surface) }
     return <Box flexDirection="column" rowGap={1} {...fullWidth(e.props.text)}>{drawMarkdown($, el, surfaceStyle, blocks, columnsOf(e.viewport, surfaceStyle), math, pictures, undefined, open, { id: e.requestId, press: reach.marks })}</Box>
   })
 
@@ -818,26 +838,18 @@ export const register: Register = (on, options) => {
     const blocks = parseCached(e.props.text)
     if (blocks.length === 0) return next(e)
     const el = $.ui.resolve(e)
-    const { Box, Text } = el
     const narration = style.toolStyle === 'tree-bold' && blocks.length === 1 && blocks[0]!.kind === 'paragraph'
     const reach = await linkReach($, probes, style)
     const math = await mathOfBlocks($, latex, e.surface, blocks)
     const pictures = await picturesOf($, style, probes, e.surface, blocks)
-    const surfaceStyle = await withFoundPaths($, pathChecks, forSurface(fit(e.viewport), e.surface, reach), blocks)
+    const surfaceStyle = { ...(await withFoundPaths($, pathChecks, forSurface(fit(e.viewport), e.surface, reach), blocks)), images: await imagesOn($, probes, e.surface) }
     const open = await read($, unfolded)
     const reply = blocks.length > 1 || hasRtl(e.props.text) ? e.props.text : undefined
     const corner = reply !== undefined && markerRoom(surfaceStyle) > 0
-    return (
-      <Box key="msg" flexDirection="row">
-        <Box width={2} flexShrink={0}>
-          <Text color={style.theme.accent}>{e.props.isFirstOfReply ? '●' : ' '}</Text>
-        </Box>
-        <Box flexDirection="column" rowGap={1} flexGrow={1}>
-          {drawMarkdown($, el, narration ? { ...surfaceStyle, narration } : surfaceStyle, blocks, columnsOf(e.viewport, surfaceStyle), math, pictures, reply, open, { id: e.requestId, press: reach.marks })}
-        </Box>
-        {corner ? <Box width={MARK} flexShrink={0} /> : null}
-      </Box>
-    )
+    const columns = columnsOf(e.viewport, surfaceStyle)
+    const framed = replyStyleFor(surfaceStyle, e.props.text)
+    const drawn = drawMarkdown($, el, narration ? { ...surfaceStyle, narration } : surfaceStyle, blocks, columns - replyRoom(framed), math, pictures, reply, open, { id: e.requestId, press: reach.marks })
+    return renderReply(el, framed, drawn, e.props.isFirstOfReply === true, columns, corner)
   })
 
   on('prismantis.markdown', async ($, e, next) => {

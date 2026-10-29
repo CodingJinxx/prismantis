@@ -167,7 +167,7 @@ for (const [kind, cell] of [
   })
 }
 
-test('a link column is sized for the URL it shows', async $ => {
+test('a link column is sized for the URL it shows', { options: { replyStyle: 'off' } }, async $ => {
   const url = 'https://example.com/a/rather/long/path'
   const ui = await $.ui.mount(mount(`| link | n |\n|---|---|\n| [go](${url}) | 1 |`))
   const cells = (await ui.findAll({ type: 'Box' })).filter(b => typeof b.props.width === 'number' && b.props.flexShrink === 0).slice(1)
@@ -191,7 +191,7 @@ test('presets stay intact', async () => {
   expect(PRESETS.dracula.tableHeader).toBe('#f1fa8c')
 })
 
-test('code blocks draw no frame, so a mouse selection copies only the code', async $ => {
+test('code blocks draw no frame, so a mouse selection copies only the code', { options: { replyStyle: 'off' } }, async $ => {
   const ui = await $.ui.mount(mount('```bash\nls -la\n```'))
   expect((await ui.findAll({ type: 'Box' })).some(b => b.props.borderStyle !== undefined)).toBe(false)
   await ui.unmount()
@@ -353,9 +353,12 @@ test('the help screen shows every element prismantis draws', async () => {
   const blocks = parse(showcaseText(Object.keys(PRESETS)), hl)
   expect(showcaseText(Object.keys(PRESETS))).toContain('promptStyle')
   expect(showcaseText(Object.keys(PRESETS))).toContain('`wide`')
+  expect(showcaseText(Object.keys(PRESETS))).toContain('`replyStyle`')
+  expect(showcaseText(Object.keys(PRESETS))).toContain('`You ⬤`')
   expect(showcaseText(Object.keys(PRESETS))).toContain('A paste of 4 lines or more')
   expect(showcaseText(Object.keys(PRESETS))).toContain('`clock`')
   expect(showcaseText([])).toContain('⧉ html')
+  expect(showcaseText([])).toContain('`▣ png`')
   expect(showcaseText([])).toContain('src/app.ts:42, and Windows paths like C:\\work\\plan.md')
   expect(showcaseText([])).toContain('<i>Reply</i>')
   expect(showcaseText([])).toContain('CopyQ')
@@ -402,6 +405,7 @@ test('the help screen shows every element prismantis draws', async () => {
   expect(showcaseText([])).toContain('Files a shell command changes')
   expect(showcaseText([])).toContain('Set `diffStyle` in `/config` for the look: `card`, `full`, `marks` or `bar`')
   expect(showcaseText([])).toContain('Set `pieStyle` to `bars` in `/config` for one bar per slice')
+  expect(showcaseText([])).toContain('as a smooth picture in kitty and Ghostty')
   expect(showcaseText([])).toContain("A file Write creates shows its first 10 lines as numbered code in the theme's colors with no diff marks")
   expect(showcaseText([])).toContain('A file an Edit or a shell command creates shows its first 10 lines as added lines under `Created`')
   expect(showcaseText([])).toContain('one `Deleted` line that opens to its removed lines on a click')
@@ -469,6 +473,7 @@ test('the help screen fits one screen: few blocks, two alerts, a table, a list a
   expect(helpText([])).toContain('`random`')
   expect(showcaseText([])).toContain('/prismantis theme random')
   expect(helpText([])).toContain('HTML (macOS/Linux)')
+  expect(helpText([])).toContain('PNG image (macOS/Windows)')
   const diagrams = blocks.flatMap(b => (b.kind === 'code' && b.lang === 'mermaid' ? [b.lines.join('\n')] : []))
   expect(diagrams.length).toBe(2)
   for (const source of diagrams) expect(mermaidText(source, false, 100)).not.toBeNull()
@@ -627,14 +632,22 @@ test('http hyperlinks start at Claude Code 2.1.289', () => {
   for (const base of ['2.1.288', '2.1.287', '2.0.999', '1.9.400', 'dev', '', undefined]) expect(takesHttpLinks(base)).toBe(false)
 })
 
-const EDITOR_LINKS = '[note](vscode://file/C:/src/notes.md:12) [insiders](vscode-insiders://file/home/me/app.ts) [clone](vscode://vscode.git/clone?url=https://example.com/x.git)'
+const EDITOR_LINKS = '[note](vscode://file/C:/src/notes.md:12) [insiders](vscode-insiders://file/home/me/app.ts) [cursor](cursor://file/C:/src/app.ts:3:5) [windsurf](windsurf://file/home/me/run.py:7) [zed](zed://file/home/me/main.rs:9:2) [clone](vscode://vscode.git/clone?url=https://example.com/x.git) [zclone](zed://git/clone?repo=https://example.com/x.git) [settings](zed://settings)'
 
-test('VS Code file links become terminal hyperlinks from Claude Code 2.1.294', async ($, on) => {
+test('Editor file links become terminal hyperlinks from Claude Code 2.1.294', async ($, on) => {
   claudeAt(on, '2.1.294')
   if (!(await linksHttp($.ui.mount(mount('[x](vscode://file/C:/x.md)'))))) return
   const ui = await $.ui.mount(mount(EDITOR_LINKS))
-  expect((await ui.findAll({ type: 'Link' })).map(l => l.props.href)).toEqual(['vscode://file/C:/src/notes.md:12', 'vscode-insiders://file/home/me/app.ts'])
+  expect((await ui.findAll({ type: 'Link' })).map(l => l.props.href)).toEqual([
+    'vscode://file/C:/src/notes.md:12',
+    'vscode-insiders://file/home/me/app.ts',
+    'cursor://file/C:/src/app.ts:3:5',
+    'windsurf://file/home/me/run.py:7',
+    'zed://file/home/me/main.rs:9:2',
+  ])
   expect(await ui.find({ type: 'Text', text: /^clone \(vscode:\/\/vscode\.git\/clone\?url=https:\/\/example\.com\/x\.git\)$/ })).toBeDefined()
+  expect(await ui.find({ type: 'Text', text: /^zclone \(zed:\/\/git\/clone\?repo=https:\/\/example\.com\/x\.git\)$/ })).toBeDefined()
+  expect(await ui.find({ type: 'Text', text: /^settings \(zed:\/\/settings\)$/ })).toBeDefined()
   await ui.unmount()
 })
 
@@ -643,16 +656,17 @@ for (const [where, surface, base] of [
   ['on Claude Code 2.1.293', 'terminal', '2.1.293'],
   ['when the Claude Code version is unknown', 'terminal', undefined],
 ] as const) {
-  test(`VS Code file links draw as plain text ${where}`, async ($, on) => {
+  test(`Editor file links draw as plain text ${where}`, async ($, on) => {
     if (base) claudeAt(on, base)
     const ui = await $.ui.mount({ ...mount(EDITOR_LINKS), surface })
     expect(await ui.findAll({ type: 'Link' })).toHaveLength(0)
     expect(await ui.find({ type: 'Text', text: /^note \(vscode:\/\/file\/C:\/src\/notes\.md:12\)$/ })).toBeDefined()
+    expect(await ui.find({ type: 'Text', text: /^zed \(zed:\/\/file\/home\/me\/main\.rs:9:2\)$/ })).toBeDefined()
     await ui.unmount()
   })
 }
 
-test('VS Code file hyperlinks start at Claude Code 2.1.294', () => {
+test('Editor file hyperlinks start at Claude Code 2.1.294', () => {
   for (const base of ['2.1.294', '2.1.294-dev', '2.1.296', '2.1.1000', '2.2.0', '3.0.0']) expect(takesEditorLinks(base)).toBe(true)
   for (const base of ['2.1.293', '2.1.289', '2.1.287', '2.0.999', 'dev', '', undefined]) expect(takesEditorLinks(base)).toBe(false)
 })
@@ -1711,7 +1725,7 @@ test('gantt bars end on an eighth of a cell and start on a half, so close durati
   expect(mermaidText('gantt\n  dateFormat YYYY-MM-DD\n  A :a, 2026-10-01, 2d', true, 80)).not.toMatch(/[▐▏▎▍▌▋▊▉]/)
 })
 
-test('a gantt bar end drawn in part of a cell takes its bar color, while axis ticks keep theirs', async $ => {
+test('a gantt bar end drawn in part of a cell takes its bar color, while axis ticks keep theirs', { options: { replyStyle: 'off' } }, async $ => {
   const ui = await $.ui.mount(mount('```mermaid\n' + FINE_GANTT + '\n```', 80))
   expect(await ui.find({ type: 'Text', text: /^█+[▎▍▌▋▊▉]$/ })).toBeDefined()
   expect(await ui.find({ type: 'Text', text: /^▐█+$/ })).toBeDefined()
@@ -1978,7 +1992,7 @@ for (const surface of ['terminal', 'desktop'] as const) test(`footnotes number a
   await ui.unmount()
 })
 
-for (const copyButtons of [true, false]) test(`a quote ${copyButtons ? 'beside its copy button' : 'without a copy button'} sizes its bar for the width left`, { options: { copyButtons } }, async $ => {
+for (const copyButtons of [true, false]) test(`a quote ${copyButtons ? 'beside its copy button' : 'without a copy button'} sizes its bar for the width left`, { options: { replyStyle: 'off', copyButtons } }, async $ => {
   const ui = await $.ui.mount(mount(`> ${'word '.repeat(10)}end`, 60))
   expect(Math.max(...(await barLines(ui))) > 1).toBe(copyButtons)
   await ui.unmount()

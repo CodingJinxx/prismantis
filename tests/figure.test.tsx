@@ -369,6 +369,26 @@ test('a figure with an emoji or a markup error stays a code block', async ($, on
   }
 })
 
+test('a figure that stays a code block strips role markup from its lines on terminal', async ($, on) => {
+  engine(on)
+  const ui = await $.ui.mount(reply(['```figure', '┌────┐ 🚀', '{ok:done} {accent:line}', '```'].join('\n'), 'terminal'))
+  expect(await ui.find({ type: 'Text', text: /^── figure$/ })).toBeDefined()
+  expect(await ui.find({ type: 'Text', text: /\{ok:/ })).toBeUndefined()
+  expect(await ui.find({ type: 'Text', text: /\{accent:/ })).toBeUndefined()
+  await ui.unmount()
+})
+
+test('a figure that stays a code block strips role markup from its lines on desktop', async ($, on) => {
+  engine(on)
+  const ui = await $.ui.mount(reply(['```figure', '┌────┐ 🚀', '{ok:done} {accent:line}', '```'].join('\n'), 'desktop'))
+  expect(await ui.find({ type: 'Text', text: /^── figure$/ })).toBeDefined()
+  const source = String((await ui.find({ type: 'Code' }))?.props.source ?? '')
+  expect(source).not.toContain('{ok:')
+  expect(source).not.toContain('{accent:')
+  expect(source).toContain('done')
+  await ui.unmount()
+})
+
 test('a figure whose frame slips is reframed and one that does not close is drawn as written, without a note', async ($, on) => {
   engine(on)
   for (const surface of ['terminal', 'desktop'] as const) {
@@ -393,7 +413,7 @@ test('a figure wider than the terminal stays a code block', async ($, on) => {
   }
 })
 
-test('a figure as wide as the hint allows draws in an 80-column window, one column more does not', async ($, on) => {
+test('a figure as wide as the hint allows draws in an 80-column window, one column more does not', { options: { replyStyle: 'off' } }, async ($, on) => {
   engine(on)
   claudeAt(on, '2.1.299')
   for (const [surface, columns] of [['terminal', 80], ['desktop', 96]] as const) {
