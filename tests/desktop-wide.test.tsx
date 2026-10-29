@@ -53,7 +53,7 @@ for (const version of ['2.1.287', '2.1.296']) {
   })
 }
 
-test('a box table on desktop costs under two and a half times the nodes it costs on a terminal', { options: { tableStyle: 'box' } }, async ($, on) => {
+test('a box table on desktop costs under 1.3 times the nodes it costs on a terminal', { options: { tableStyle: 'box' } }, async ($, on) => {
   claudeAt(on, '2.1.299')
   const rows = Array.from({ length: 50 }, (_, i) => `| ${i} | svc-${i} | us-east | ${i * 3} | ${i % 90}ms |`).join('\n')
   const text = `| id | service | region | pods | p95 |\n|---|---|---|---|---|\n${rows}`
@@ -67,5 +67,5 @@ test('a box table on desktop costs under two and a half times the nodes it costs
   const terminal = await nodes('terminal')
   const desktop = await nodes('desktop')
   if (desktop === undefined) return
-  expect(desktop).toBeLessThan(terminal! * 2.5)
+  expect(desktop).toBeLessThan(terminal! * 1.3)
 })
